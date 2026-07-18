@@ -1,0 +1,30 @@
+appId: com.local.chatgptdesktop
+productName: ChatGPT Desktop
+copyright: Copyright © 2026
+
+directories:
+  output: release
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - assets/**/*
+
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ChatGPT Desktop
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  artifactName: ChatGPT-Desktop-Setup-${version}.exe
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
