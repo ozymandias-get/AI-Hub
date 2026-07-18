@@ -1,6 +1,7 @@
 import { app, Menu, Tray, nativeImage } from 'electron';
 import { getMainWindow } from './window-manager';
-import { navigateToChatGPT } from './chatgpt-view';
+import { loadServiceURL, getCurrentServiceId } from './service-view';
+import { getServiceById, getDefaultService } from './services';
 import { setQuitting } from './app-state';
 import * as path from 'path';
 
@@ -22,7 +23,7 @@ export function setupTray(): void {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip('ChatGPT Desktop');
+  tray.setToolTip('AI Desktop');
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -36,8 +37,12 @@ export function setupTray(): void {
       },
     },
     {
-      label: "ChatGPT Ana Sayfasına Git",
-      click: () => navigateToChatGPT(),
+      label: 'Ana Sayfaya Git',
+      click: () => {
+        const id = getCurrentServiceId();
+        const svc = getServiceById(id ?? '') ?? getDefaultService();
+        loadServiceURL(svc);
+      },
     },
     { type: 'separator' },
     {

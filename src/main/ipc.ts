@@ -1,6 +1,6 @@
 import { ipcMain, shell } from 'electron';
-import { getChatGPTView } from './chatgpt-view';
-import { CHATGPT_URL } from './constants';
+import { getCurrentView, getCurrentServiceId } from './service-view';
+import { getServiceById, getDefaultService } from './services';
 import { isAllowedUrl } from './navigation-policy';
 
 let ipcRegistered = false;
@@ -24,9 +24,11 @@ export function registerIpcHandlers(): void {
   ipcRegistered = true;
 
   ipcMain.on('retry-load', () => {
-    const view = getChatGPTView();
+    const view = getCurrentView();
     if (view && !view.webContents.isDestroyed()) {
-      view.webContents.loadURL(CHATGPT_URL);
+      const id = getCurrentServiceId();
+      const service = getServiceById(id ?? '') ?? getDefaultService();
+      view.webContents.loadURL(service.url);
     }
   });
 

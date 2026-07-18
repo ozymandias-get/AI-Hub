@@ -3,11 +3,12 @@ import * as path from 'path';
 import { SettingsStore } from './settings-store';
 import { createMainWindow, getMainWindow, ensureWindowVisible } from './window-manager';
 import {
-  createChatGPTView,
-  loadChatGPTURL,
+  createServiceView,
+  loadServiceURL,
   setSettingsStore,
   restoreZoomLevel,
-} from './chatgpt-view';
+} from './service-view';
+import { getDefaultService } from './services';
 import { setupMenu } from './menu';
 import { setupTray, destroyTray } from './tray';
 import { registerIpcHandlers } from './ipc';
@@ -90,9 +91,9 @@ function bootstrapWindow(): void {
 
   let view: Electron.WebContentsView;
   try {
-    view = createChatGPTView();
+    view = createServiceView(getDefaultService());
   } catch (err) {
-    console.warn('[App] Failed to create ChatGPT view:', err);
+    console.warn('[App] Failed to create service view:', err);
     win.webContents
       .executeJavaScript(
         `document.getElementById('error-message').textContent = 'Uygulama baslatilamadi: ${escapeForSingleQuotedJs(String(err))}'; document.getElementById('error-screen')?.classList.remove('hidden');`
@@ -103,7 +104,7 @@ function bootstrapWindow(): void {
   activeView = view;
 
   setupViewEvents(win, view);
-  loadChatGPTURL();
+  loadServiceURL(getDefaultService());
   setupMenu(win, settings);
   restoreZoomLevel();
 

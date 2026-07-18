@@ -1,16 +1,17 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, dialog } from 'electron';
 import {
-  navigateToChatGPT,
-  reloadChatGPT,
+  loadServiceURL,
+  reloadService,
   goBack,
   goForward,
   zoomIn,
   zoomOut,
   zoomReset,
-} from './chatgpt-view';
+  getCurrentServiceId,
+} from './service-view';
+import { getServiceById, getDefaultService } from './services';
 import type { SettingsStore } from './settings-store';
 import { setQuitting } from './app-state';
-import { CHATGPT_URL } from './constants';
 
 export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
   const isDev = !app.isPackaged;
@@ -20,20 +21,24 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
       label: 'Uygulama',
       submenu: [
         {
-          label: 'ChatGPT Ana Sayfası',
+          label: 'Ana Sayfa',
           accelerator: 'CmdOrCtrl+L',
-          click: () => navigateToChatGPT(),
+          click: () => {
+            const id = getCurrentServiceId();
+            const svc = getServiceById(id ?? '') ?? getDefaultService();
+            loadServiceURL(svc);
+          },
         },
         { type: 'separator' },
         {
           label: 'Yenile',
           accelerator: 'CmdOrCtrl+R',
-          click: () => reloadChatGPT(false),
+          click: () => reloadService(false),
         },
         {
           label: 'Önbelleği Yok Sayarak Yenile',
           accelerator: 'CmdOrCtrl+Shift+R',
-          click: () => reloadChatGPT(true),
+          click: () => reloadService(true),
         },
         { type: 'separator' },
         {
@@ -102,9 +107,11 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
       label: 'Yardım',
       submenu: [
         {
-          label: "ChatGPT'yi Tarayıcıda Aç",
+          label: 'Servisi Tarayıcıda Aç',
           click: () => {
-            shell.openExternal(CHATGPT_URL).catch((err) => console.warn('Failed to open browser:', err));
+            const id = getCurrentServiceId();
+            const svc = getServiceById(id ?? '') ?? getDefaultService();
+            shell.openExternal(svc.url).catch((err) => console.warn('Failed to open browser:', err));
           },
         },
         { type: 'separator' },
