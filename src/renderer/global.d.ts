@@ -1,9 +1,16 @@
-interface ChatGPTDesktopAPI {
-  chatgptUrl: string;
-  retryLoad: () => void;
-  openExternal: (url: string) => void;
+export interface AiDesktopAPI {
+  getServices(): Promise<any[]>;
+  minimize(): void;
+  maximize(): void;
+  close(): void;
+  selectService(id: string): void;
+  retryLoad(): void;
+  openExternal(url: string): void;
 }
 
-interface Window {
-  chatgptDesktop: ChatGPTDesktopAPI;
+declare global {
+  interface Window {
+    aiDesktop: AiDesktopAPI;
+    chatgptDesktop: any;
+  }
 }

@@ -24,6 +24,8 @@ export function createMainWindow(settings: SettingsStore): BrowserWindow {
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
+    frame: false,
+    titleBarStyle: 'hidden',
     icon: path.join(__dirname, '../../assets/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),

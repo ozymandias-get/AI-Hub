@@ -1,12 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { CHATGPT_URL } from '../main/constants';
 
-contextBridge.exposeInMainWorld('chatgptDesktop', {
-  chatgptUrl: CHATGPT_URL,
-  retryLoad: (): void => {
-    ipcRenderer.send('retry-load');
-  },
-  openExternal: (url: string): void => {
-    ipcRenderer.send('open-external', url);
-  },
+contextBridge.exposeInMainWorld('aiDesktop', {
+  getServices: (): Promise<any[]> => ipcRenderer.invoke('get-services'),
+  minimize: (): void => ipcRenderer.send('window-minimize'),
+  maximize: (): void => ipcRenderer.send('window-maximize'),
+  close: (): void => ipcRenderer.send('window-close'),
+  selectService: (id: string): void => ipcRenderer.send('service-select', id),
+  retryLoad: (): void => ipcRenderer.send('retry-load'),
+  openExternal: (url: string): void => ipcRenderer.send('open-external', url),
 });
