@@ -1,8 +1,8 @@
 {
-  "name": "chatgpt-desktop",
+  "name": "ai-desktop",
   "version": "1.0.0",
-  "description": "ChatGPT Desktop Application",
-  "author": "ChatGPT Desktop",
+  "description": "AI Desktop Application",
+  "author": "AI Desktop",
   "license": "MIT",
   "main": "dist/main/main.js",
   "scripts": {

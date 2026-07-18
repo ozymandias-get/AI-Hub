@@ -1,5 +1,5 @@
-appId: com.local.chatgptdesktop
-productName: ChatGPT Desktop
+appId: com.local.aidesktop
+productName: AI Desktop
 copyright: Copyright © 2026
 
 directories:
@@ -22,9 +22,9 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: ChatGPT Desktop
+  shortcutName: AI Desktop
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
-  artifactName: ChatGPT-Desktop-Setup-${version}.exe
+  artifactName: AI-Desktop-Setup-${version}.exe
   deleteAppDataOnUninstall: false
   runAfterFinish: true
