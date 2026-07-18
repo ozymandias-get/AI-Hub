@@ -1,7 +1,5 @@
 import { app, Menu, Tray, nativeImage } from 'electron';
 import { getMainWindow } from './window-manager';
-import { loadServiceURL, getCurrentServiceId } from './service-view';
-import { getServiceById, getDefaultService } from './services';
 import { setQuitting } from './app-state';
 import * as path from 'path';
 
@@ -37,11 +35,16 @@ export function setupTray(): void {
       },
     },
     {
-      label: 'Ana Sayfaya Git',
+      label: 'Servis Değiştir',
       click: () => {
-        const id = getCurrentServiceId();
-        const svc = getServiceById(id ?? '') ?? getDefaultService();
-        loadServiceURL(svc);
+        const win = getMainWindow();
+        if (win) {
+          win.show();
+          win.focus();
+          win.webContents.executeJavaScript(
+            "document.getElementById('category-select')?.focus();"
+          ).catch(() => {});
+        }
       },
     },
     { type: 'separator' },

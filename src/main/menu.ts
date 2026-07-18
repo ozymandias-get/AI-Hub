@@ -1,6 +1,5 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, dialog } from 'electron';
 import {
-  loadServiceURL,
   reloadService,
   goBack,
   goForward,
@@ -8,25 +7,42 @@ import {
   zoomOut,
   zoomReset,
   getCurrentServiceId,
+  switchToService,
 } from './service-view';
-import { getServiceById, getDefaultService } from './services';
+import { SERVICE_CATEGORIES, getServiceById } from './services';
 import type { SettingsStore } from './settings-store';
 import { setQuitting } from './app-state';
 
 export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
   const isDev = !app.isPackaged;
 
+  const servislerSubmenu: MenuItemConstructorOptions[] = [];
+  for (const cat of SERVICE_CATEGORIES) {
+    servislerSubmenu.push({
+      label: `── ${cat.name} ──`,
+      enabled: false,
+    });
+    for (const svc of cat.services) {
+      servislerSubmenu.push({
+        label: svc.name,
+        click: () => switchToService(svc.id, win, settings),
+      });
+    }
+    servislerSubmenu.push({ type: 'separator' });
+  }
+
   const template: MenuItemConstructorOptions[] = [
     {
       label: 'Uygulama',
       submenu: [
         {
-          label: 'Ana Sayfa',
+          label: 'Servis Değiştir',
           accelerator: 'CmdOrCtrl+L',
           click: () => {
-            const id = getCurrentServiceId();
-            const svc = getServiceById(id ?? '') ?? getDefaultService();
-            loadServiceURL(svc);
+            win.webContents.focus();
+            win.webContents.executeJavaScript(
+              "document.getElementById('category-select')?.focus();"
+            ).catch(() => {});
           },
         },
         { type: 'separator' },
@@ -61,6 +77,10 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
       ],
     },
     {
+      label: 'Servisler',
+      submenu: servislerSubmenu,
+    },
+    {
       label: 'Görünüm',
       submenu: [
         {
@@ -82,9 +102,7 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
         {
           label: 'Tam Ekran',
           accelerator: 'F11',
-          click: () => {
-            win.setFullScreen(!win.isFullScreen());
-          },
+          click: () => { win.setFullScreen(!win.isFullScreen()); },
         },
       ],
     },
@@ -110,8 +128,10 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
           label: 'Servisi Tarayıcıda Aç',
           click: () => {
             const id = getCurrentServiceId();
-            const svc = getServiceById(id ?? '') ?? getDefaultService();
-            shell.openExternal(svc.url).catch((err) => console.warn('Failed to open browser:', err));
+            if (id) {
+              const svc = getServiceById(id);
+              if (svc) shell.openExternal(svc.url).catch((err) => console.warn('Failed to open browser:', err));
+            }
           },
         },
         { type: 'separator' },
@@ -120,8 +140,8 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
           click: () => {
             dialog.showMessageBox(win, {
               type: 'info',
-              title: 'ChatGPT Desktop',
-              message: `ChatGPT Desktop v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
+              title: 'AI Desktop',
+              message: `AI Desktop v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
             }).catch((err) => console.warn('Failed to show version dialog:', err));
           },
         },
@@ -136,9 +156,7 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
         {
           label: 'Geliştirici Araçları',
           accelerator: 'CmdOrCtrl+Shift+I',
-          click: () => {
-            win.webContents.toggleDevTools();
-          },
+          click: () => { win.webContents.toggleDevTools(); },
         },
       ],
     });

@@ -7,13 +7,16 @@ import {
   loadServiceURL,
   setSettingsStore,
   restoreZoomLevel,
+  resizeViewToWindow,
+  getCurrentView,
+  getCurrentServiceId,
 } from './service-view';
-import { getDefaultService } from './services';
+import { getServiceById, getDefaultService, type AIService } from './services';
 import { setupMenu } from './menu';
 import { setupTray, destroyTray } from './tray';
-import { registerIpcHandlers } from './ipc';
+import { registerIpcHandlers, setIpcSettings } from './ipc';
 import { setQuitting, getIsQuitting } from './app-state';
-import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, APP_USER_MODEL_ID } from './constants';
+import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, TITLE_BAR_HEIGHT, APP_USER_MODEL_ID } from './constants';
 
 process.on('unhandledRejection', (reason) => {
   console.warn('[App] Unhandled rejection:', reason);
@@ -46,6 +49,7 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     registerIpcHandlers();
+    setIpcSettings(settings);
     bootstrapWindow();
   });
 
@@ -89,25 +93,25 @@ function bootstrapWindow(): void {
     console.warn('[App] Failed to load renderer HTML:', err);
   });
 
+  const lastServiceId = settings.getWindow().lastService;
+  const service = getServiceById(lastServiceId) ?? getDefaultService();
+
   let view: Electron.WebContentsView;
   try {
-    view = createServiceView(getDefaultService());
+    view = createServiceView(service);
   } catch (err) {
     console.warn('[App] Failed to create service view:', err);
-    win.webContents
-      .executeJavaScript(
-        `document.getElementById('error-message').textContent = 'Uygulama baslatilamadi: ${escapeForSingleQuotedJs(String(err))}'; document.getElementById('error-screen')?.classList.remove('hidden');`
-      )
-      .catch(() => {});
+    win.webContents.executeJavaScript(
+      `document.getElementById('error-message').textContent = 'Uygulama baslatilamadi: ${escapeForSingleQuotedJs(String(err))}'; document.getElementById('error-screen')?.classList.remove('hidden');`
+    ).catch(() => {});
     return;
   }
   activeView = view;
 
-  setupViewEvents(win, view);
-  loadServiceURL(getDefaultService());
+  setupViewEvents(win, view, service);
+  loadServiceURL(service);
   setupMenu(win, settings);
   restoreZoomLevel();
-
   setupTray();
 
   win.on('close', (event) => {
@@ -115,11 +119,47 @@ function bootstrapWindow(): void {
       clearTimeout(resizeTimer);
       resizeTimer = null;
     }
+    saveWindowState(win);
     if (!getIsQuitting()) {
       event.preventDefault();
       win.hide();
     }
   });
+
+  win.on('resize', () => {
+    if (viewAdded && activeView === view && !win.isDestroyed()) {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        resizeViewToWindow(win);
+        resizeTimer = null;
+      }, RESIZE_DEBOUNCE_MS);
+    }
+  });
+
+  win.on('maximize', () => updateMaximizeButton(win));
+  win.on('unmaximize', () => updateMaximizeButton(win));
+}
+
+function saveWindowState(win: BrowserWindow): void {
+  const maximized = win.isMaximized();
+  if (!maximized) {
+    const bounds = win.getBounds();
+    settings.setWindow({
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+    });
+  }
+  settings.setWindow({ isMaximized: maximized });
+  settings.saveSync();
+}
+
+function updateMaximizeButton(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  win.webContents.executeJavaScript(
+    `document.getElementById('maximize-btn')?.classList.toggle('is-maximized', ${win.isMaximized()});`
+  ).catch(() => {});
 }
 
 function escapeForSingleQuotedJs(value: string): string {
@@ -134,25 +174,18 @@ function escapeForSingleQuotedJs(value: string): string {
     .replace(/`/g, '\\`');
 }
 
-function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView): void {
+function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView, service: AIService): void {
   view.webContents.on('did-start-loading', () => {
     if (win.isDestroyed()) return;
     win.setProgressBar(-1, { mode: 'indeterminate' });
-    win.webContents
-      .executeJavaScript(
-        `
-      (() => {
-        if (window.__splashTimer) {
-          clearTimeout(window.__splashTimer);
-          window.__splashTimer = null;
-        }
+    win.webContents.executeJavaScript(
+      `(() => {
+        if (window.__splashTimer) { clearTimeout(window.__splashTimer); window.__splashTimer = null; }
         document.getElementById('error-screen')?.classList.add('hidden');
         document.getElementById('splash-screen')?.classList.remove('done', 'hidden');
         document.getElementById('splash-screen')?.classList.add('active');
-      })();
-    `
-      )
-      .catch((err) => console.warn('Failed to show splash:', err));
+      })();`
+    ).catch((err) => console.warn('Failed to show splash:', err));
   });
 
   view.webContents.on('did-stop-loading', () => {
@@ -160,14 +193,12 @@ function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView): vo
     win.setProgressBar(-1, { mode: 'none' });
     if (!viewAdded && activeView === view) {
       win.contentView.addChildView(view);
-      resizeView(win, view);
+      resizeViewToWindow(win);
       viewAdded = true;
       view.webContents.focus();
     }
-    win.webContents
-      .executeJavaScript(
-        `
-      (() => {
+    win.webContents.executeJavaScript(
+      `(() => {
         const splash = document.getElementById('splash-screen');
         if (splash) splash.classList.add('done');
         if (window.__splashTimer) clearTimeout(window.__splashTimer);
@@ -175,64 +206,28 @@ function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView): vo
           if (splash) splash.classList.add('hidden');
           window.__splashTimer = null;
         }, ${LOADING_BAR_TIMEOUT_MS + 300});
-      })();
-    `
-      )
-      .catch((err) => console.warn('Failed to hide splash:', err));
+      })();`
+    ).catch((err) => console.warn('Failed to hide splash:', err));
   });
 
   view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
     if (win.isDestroyed()) return;
-    // Ignore aborted loads and subframe failures
-    if (!isMainFrame || errorCode === -3) {
-      return;
-    }
+    if (!isMainFrame || errorCode === -3) return;
 
     win.setProgressBar(-1, { mode: 'none' });
     if (viewAdded && activeView === view) {
-      try {
-        win.contentView.removeChildView(view);
-      } catch {
-        // View may already be detached
-      }
+      try { win.contentView.removeChildView(view); } catch {}
       viewAdded = false;
     }
 
     const escaped = escapeForSingleQuotedJs(errorDescription || 'Bilinmeyen hata');
-    win.webContents
-      .executeJavaScript(
-        `
-      (() => {
+    win.webContents.executeJavaScript(
+      `(() => {
         document.getElementById('splash-screen')?.classList.add('hidden');
         const msg = document.getElementById('error-message');
         if (msg) msg.textContent = '${escaped}';
         document.getElementById('error-screen')?.classList.remove('hidden');
-      })();
-    `
-      )
-      .catch((err) => console.warn('Failed to show error screen:', err));
-  });
-
-  win.on('resize', () => {
-    if (viewAdded && activeView === view && !win.isDestroyed()) {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        resizeView(win, view);
-        resizeTimer = null;
-      }, RESIZE_DEBOUNCE_MS);
-    }
-  });
-}
-
-function resizeView(win: BrowserWindow, view: Electron.WebContentsView): void {
-  if (win.isDestroyed() || view.webContents.isDestroyed()) {
-    return;
-  }
-  const contentBounds = win.getContentBounds();
-  view.setBounds({
-    x: 0,
-    y: 0,
-    width: contentBounds.width,
-    height: contentBounds.height,
+      })();`
+    ).catch((err) => console.warn('Failed to show error screen:', err));
   });
 }
