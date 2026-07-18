@@ -18,6 +18,7 @@ export interface WindowSettings {
   isMaximized: boolean;
   /** Zoom factor (1.0 = 100%) */
   zoomLevel: number;
+  lastService: string;
 }
 
 export interface AppSettings {
@@ -33,6 +34,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     y: undefined,
     isMaximized: false,
     zoomLevel: DEFAULT_ZOOM_LEVEL,
+    lastService: 'chatgpt',
   },
   minimizeToTray: false,
 };
