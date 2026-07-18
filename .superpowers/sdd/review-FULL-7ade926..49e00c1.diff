@@ -1,0 +1,1878 @@
+# Review package: 7ade926..49e00c1
+
+## Commits
+
+49e00c1 chore: rename app to AI Desktop
+d5c55d9 feat: main process service switching integration
+30fd902 feat: custom title bar with service dropdown
+9b8829c feat: frameless window, new IPC handlers, preload API
+5d8df9e refactor: generalize chatgpt-view to service-view
+03ab573 feat: add services data, constants, settings schema
+
+## Files changed
+
+ electron-builder.yml       |   8 +-
+ package.json               |   6 +-
+ src/main/chatgpt-view.ts   | 151 ----------------------------
+ src/main/constants.ts      |   4 +-
+ src/main/ipc.ts            |  64 ++++++++----
+ src/main/main.ts           | 150 ++++++++++++++-------------
+ src/main/menu.ts           |  61 +++++++----
+ src/main/service-view.ts   | 167 ++++++++++++++++++++++++++++++
+ src/main/services.ts       | 113 +++++++++++++++++++++
+ src/main/settings-store.ts |   2 +
+ src/main/tray.ts           |  16 ++-
+ src/main/window-manager.ts |   2 +
+ src/preload/preload.ts     |  17 ++--
+ src/renderer/global.d.ts   |  19 ++--
+ src/renderer/index.html    |  61 +++++++----
+ src/renderer/renderer.ts   |  93 +++++++++++++++--
+ src/renderer/styles.css    | 246 +++++++++++++++++++++++++++++----------------
+ 17 files changed, 772 insertions(+), 408 deletions(-)
+
+## Diff
+
+diff --git a/electron-builder.yml b/electron-builder.yml
+index e90cd5a..19d0165 100644
+--- a/electron-builder.yml
++++ b/electron-builder.yml
+@@ -1,12 +1,12 @@
+-appId: com.local.chatgptdesktop
+-productName: ChatGPT Desktop
++appId: com.local.aidesktop
++productName: AI Desktop
+ copyright: Copyright ┬® 2026
+ 
+ directories:
+   output: release
+   buildResources: assets
+ 
+ files:
+   - dist/**/*
+   - assets/**/*
+ 
+@@ -15,16 +15,16 @@ win:
+   target:
+     - target: nsis
+       arch:
+         - x64
+ 
+ nsis:
+   oneClick: false
+   allowToChangeInstallationDirectory: true
+   createDesktopShortcut: true
+   createStartMenuShortcut: true
+-  shortcutName: ChatGPT Desktop
++  shortcutName: AI Desktop
+   installerIcon: assets/icon.ico
+   uninstallerIcon: assets/icon.ico
+-  artifactName: ChatGPT-Desktop-Setup-${version}.exe
++  artifactName: AI-Desktop-Setup-${version}.exe
+   deleteAppDataOnUninstall: false
+   runAfterFinish: true
+diff --git a/package.json b/package.json
+index dbc0eb6..a5d3440 100644
+--- a/package.json
++++ b/package.json
+@@ -1,15 +1,15 @@
+ {
+-  "name": "chatgpt-desktop",
++  "name": "ai-desktop",
+   "version": "1.0.0",
+-  "description": "ChatGPT Desktop Application",
+-  "author": "ChatGPT Desktop",
++  "description": "AI Desktop Application",
++  "author": "AI Desktop",
+   "license": "MIT",
+   "main": "dist/main/main.js",
+   "scripts": {
+     "build:main": "tsup --config tsup.config.ts",
+     "build:renderer": "vite build --config vite.config.renderer.ts",
+     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+     "build": "npm run clean && concurrently -n main,renderer \"npm run build:main\" \"npm run build:renderer\"",
+     "start": "npm run build && electron .",
+     "dev": "npm run build && electron .",
+     "dist": "npm run build && electron-builder",
+diff --git a/src/main/chatgpt-view.ts b/src/main/chatgpt-view.ts
+deleted file mode 100644
+index 47c4b89..0000000
+--- a/src/main/chatgpt-view.ts
++++ /dev/null
+@@ -1,151 +0,0 @@
+-import { BrowserWindow, WebContentsView } from 'electron';
+-import { setupNavigationPolicy } from './navigation-policy';
+-import { setupPermissions } from './permissions';
+-import { setupDownloads } from './downloads';
+-import { CHATGPT_URL, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, DEFAULT_ZOOM_LEVEL } from './constants';
+-import type { SettingsStore } from './settings-store';
+-
+-let chatGPTView: WebContentsView | null = null;
+-let settingsRef: SettingsStore | null = null;
+-
+-export function getChatGPTView(): WebContentsView | null {
+-  return chatGPTView;
+-}
+-
+-export function setSettingsStore(settings: SettingsStore): void {
+-  settingsRef = settings;
+-}
+-
+-function destroyExistingView(): void {
+-  if (!chatGPTView) {
+-    return;
+-  }
+-
+-  const wins = BrowserWindow.getAllWindows();
+-  for (const win of wins) {
+-    if (!win.isDestroyed()) {
+-      try {
+-        win.contentView.removeChildView(chatGPTView);
+-      } catch {
+-        // View may not be attached to this window
+-      }
+-    }
+-  }
+-
+-  try {
+-    const wc = chatGPTView.webContents;
+-    if (!wc.isDestroyed()) {
+-      wc.close();
+-    }
+-  } catch (err) {
+-    console.warn('[ChatGPTView] Failed to close previous view:', err);
+-  }
+-  chatGPTView = null;
+-}
+-
+-export function createChatGPTView(): WebContentsView {
+-  destroyExistingView();
+-
+-  const view = new WebContentsView({
+-    webPreferences: {
+-      nodeIntegration: false,
+-      contextIsolation: true,
+-      sandbox: true,
+-      webSecurity: true,
+-    },
+-  });
+-
+-  setupNavigationPolicy(view);
+-  setupPermissions(view);
+-  setupDownloads(view);
+-
+-  chatGPTView = view;
+-  return view;
+-}
+-
+-export function loadChatGPTURL(): void {
+-  navigateToChatGPT();
+-}
+-
+-export function navigateToChatGPT(): void {
+-  if (chatGPTView && !chatGPTView.webContents.isDestroyed()) {
+-    chatGPTView.webContents.loadURL(CHATGPT_URL);
+-  }
+-}
+-
+-export function reloadChatGPT(ignoreCache: boolean = false): void {
+-  if (chatGPTView && !chatGPTView.webContents.isDestroyed()) {
+-    if (ignoreCache) {
+-      chatGPTView.webContents.reloadIgnoringCache();
+-    } else {
+-      chatGPTView.webContents.reload();
+-    }
+-  }
+-}
+-
+-export function goBack(): void {
+-  if (
+-    chatGPTView &&
+-    !chatGPTView.webContents.isDestroyed() &&
+-    chatGPTView.webContents.navigationHistory.canGoBack()
+-  ) {
+-    chatGPTView.webContents.navigationHistory.goBack();
+-  }
+-}
+-
+-export function goForward(): void {
+-  if (
+-    chatGPTView &&
+-    !chatGPTView.webContents.isDestroyed() &&
+-    chatGPTView.webContents.navigationHistory.canGoForward()
+-  ) {
+-    chatGPTView.webContents.navigationHistory.goForward();
+-  }
+-}
+-
+-function persistZoomFactor(factor: number): void {
+-  if (!settingsRef) {
+-    return;
+-  }
+-  settingsRef.setWindow({ zoomLevel: factor });
+-  settingsRef.save();
+-}
+-
+-function applyZoomFactor(factor: number): void {
+-  if (!chatGPTView || chatGPTView.webContents.isDestroyed()) {
+-    return;
+-  }
+-  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, factor));
+-  chatGPTView.webContents.setZoomFactor(clamped);
+-  persistZoomFactor(clamped);
+-}
+-
+-export function restoreZoomLevel(): void {
+-  if (!chatGPTView || chatGPTView.webContents.isDestroyed()) {
+-    return;
+-  }
+-  const factor = settingsRef?.getWindow().zoomLevel ?? DEFAULT_ZOOM_LEVEL;
+-  chatGPTView.webContents.setZoomFactor(
+-    Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, factor))
+-  );
+-}
+-
+-export function zoomIn(): void {
+-  if (!chatGPTView || chatGPTView.webContents.isDestroyed()) {
+-    return;
+-  }
+-  const current = chatGPTView.webContents.getZoomFactor();
+-  applyZoomFactor(current + ZOOM_STEP);
+-}
+-
+-export function zoomOut(): void {
+-  if (!chatGPTView || chatGPTView.webContents.isDestroyed()) {
+-    return;
+-  }
+-  const current = chatGPTView.webContents.getZoomFactor();
+-  applyZoomFactor(current - ZOOM_STEP);
+-}
+-
+-export function zoomReset(): void {
+-  applyZoomFactor(DEFAULT_ZOOM_LEVEL);
+-}
+diff --git a/src/main/constants.ts b/src/main/constants.ts
+index e1c8cc1..45b3765 100644
+--- a/src/main/constants.ts
++++ b/src/main/constants.ts
+@@ -9,11 +9,13 @@ export const DEFAULT_WINDOW_HEIGHT = 850;
+ export const ZOOM_MIN = 0.5;
+ export const ZOOM_MAX = 3.0;
+ export const ZOOM_STEP = 0.1;
+ 
+ export const RESIZE_DEBOUNCE_MS = 50;
+ export const LOADING_BAR_TIMEOUT_MS = 300;
+ 
+ export const SETTINGS_FILENAME = 'app-settings.json';
+ export const DEFAULT_ZOOM_LEVEL = 1.0;
+ 
+-export const APP_USER_MODEL_ID = 'com.local.chatgptdesktop';
++export const APP_USER_MODEL_ID = 'com.local.aidesktop';
++
++export const TITLE_BAR_HEIGHT = 38;
+diff --git a/src/main/ipc.ts b/src/main/ipc.ts
+index e58a35a..f143742 100644
+--- a/src/main/ipc.ts
++++ b/src/main/ipc.ts
+@@ -1,43 +1,73 @@
+-import { ipcMain, shell } from 'electron';
+-import { getChatGPTView } from './chatgpt-view';
+-import { CHATGPT_URL } from './constants';
++import { ipcMain, shell, BrowserWindow } from 'electron';
++import { getCurrentView, getCurrentServiceId, loadServiceURL, switchToService } from './service-view';
++import { SERVICE_CATEGORIES, getServiceById } from './services';
+ import { isAllowedUrl } from './navigation-policy';
++import type { SettingsStore } from './settings-store';
+ 
+ let ipcRegistered = false;
++let settingsRef: SettingsStore | null = null;
++
++export function setIpcSettings(settings: SettingsStore): void {
++  settingsRef = settings;
++}
+ 
+ function isSafeExternalUrl(url: unknown): url is string {
+-  if (typeof url !== 'string') {
+-    return false;
+-  }
++  if (typeof url !== 'string') return false;
+   try {
+     const parsed = new URL(url);
+     return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+   } catch {
+     return false;
+   }
+ }
+ 
+ export function registerIpcHandlers(): void {
+-  if (ipcRegistered) {
+-    return;
+-  }
++  if (ipcRegistered) return;
+   ipcRegistered = true;
+ 
++  ipcMain.on('window-minimize', (event) => {
++    const win = BrowserWindow.fromWebContents(event.sender);
++    if (win) win.minimize();
++  });
++
++  ipcMain.on('window-maximize', (event) => {
++    const win = BrowserWindow.fromWebContents(event.sender);
++    if (win) {
++      if (win.isMaximized()) win.unmaximize();
++      else win.maximize();
++    }
++  });
++
++  ipcMain.on('window-close', (event) => {
++    const win = BrowserWindow.fromWebContents(event.sender);
++    if (win) win.close();
++  });
++
++  ipcMain.handle('get-services', () => {
++    return SERVICE_CATEGORIES;
++  });
++
+   ipcMain.on('retry-load', () => {
+-    const view = getChatGPTView();
++    const view = getCurrentView();
+     if (view && !view.webContents.isDestroyed()) {
+-      view.webContents.loadURL(CHATGPT_URL);
++      const id = getCurrentServiceId();
++      if (id) {
++        const svc = getServiceById(id);
++        if (svc) loadServiceURL(svc);
++      }
+     }
+   });
+ 
++  ipcMain.on('service-select', (_event, serviceId: string) => {
++    const win = BrowserWindow.fromWebContents(_event.sender);
++    if (!win || !settingsRef) return;
++    switchToService(serviceId, win, settingsRef);
++  });
++
+   ipcMain.on('open-external', (_event, url: unknown) => {
+-    if (!isSafeExternalUrl(url)) {
+-      return;
+-    }
+-    // Allow any http(s) URL for intentional "open in browser" actions
+-    shell.openExternal(url).catch((err) => console.warn('Failed to open external URL:', err));
++    if (!isSafeExternalUrl(url)) return;
++    shell.openExternal(url as string).catch((err) => console.warn('Failed to open external URL:', err));
+   });
+ }
+ 
+-/** Re-export for callers that need policy checks elsewhere. */
+ export { isAllowedUrl };
+diff --git a/src/main/main.ts b/src/main/main.ts
+index 6ad3a63..35d6009 100644
+--- a/src/main/main.ts
++++ b/src/main/main.ts
+@@ -1,25 +1,29 @@
+ import { app, BrowserWindow } from 'electron';
+ import * as path from 'path';
+ import { SettingsStore } from './settings-store';
+ import { createMainWindow, getMainWindow, ensureWindowVisible } from './window-manager';
+ import {
+-  createChatGPTView,
+-  loadChatGPTURL,
++  createServiceView,
++  loadServiceURL,
+   setSettingsStore,
+   restoreZoomLevel,
+-} from './chatgpt-view';
++  resizeViewToWindow,
++  getCurrentView,
++  getCurrentServiceId,
++} from './service-view';
++import { getServiceById, getDefaultService, type AIService } from './services';
+ import { setupMenu } from './menu';
+ import { setupTray, destroyTray } from './tray';
+-import { registerIpcHandlers } from './ipc';
++import { registerIpcHandlers, setIpcSettings } from './ipc';
+ import { setQuitting, getIsQuitting } from './app-state';
+-import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, APP_USER_MODEL_ID } from './constants';
++import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, TITLE_BAR_HEIGHT, APP_USER_MODEL_ID } from './constants';
+ 
+ process.on('unhandledRejection', (reason) => {
+   console.warn('[App] Unhandled rejection:', reason);
+ });
+ 
+ if (process.platform === 'win32') {
+   app.setAppUserModelId(APP_USER_MODEL_ID);
+ }
+ 
+ const settings = new SettingsStore();
+@@ -38,20 +42,21 @@ if (!gotSingleInstanceLock) {
+     const win = getMainWindow();
+     if (win) {
+       if (win.isMinimized()) win.restore();
+       win.show();
+       win.focus();
+     }
+   });
+ 
+   app.whenReady().then(() => {
+     registerIpcHandlers();
++    setIpcSettings(settings);
+     bootstrapWindow();
+   });
+ 
+   app.on('window-all-closed', () => {
+     if (process.platform !== 'darwin') {
+       destroyTray();
+       app.quit();
+     }
+   });
+ 
+@@ -81,157 +86,148 @@ function bootstrapWindow(): void {
+   viewAdded = false;
+   activeView = null;
+ 
+   const win = createMainWindow(settings);
+   ensureWindowVisible();
+ 
+   win.loadFile(path.join(__dirname, '../renderer/index.html')).catch((err) => {
+     console.warn('[App] Failed to load renderer HTML:', err);
+   });
+ 
++  const lastServiceId = settings.getWindow().lastService;
++  const service = getServiceById(lastServiceId) ?? getDefaultService();
++
+   let view: Electron.WebContentsView;
+   try {
+-    view = createChatGPTView();
++    view = createServiceView(service);
+   } catch (err) {
+-    console.warn('[App] Failed to create ChatGPT view:', err);
+-    win.webContents
+-      .executeJavaScript(
+-        `document.getElementById('error-message').textContent = 'Uygulama baslatilamadi: ${escapeForSingleQuotedJs(String(err))}'; document.getElementById('error-screen')?.classList.remove('hidden');`
+-      )
+-      .catch(() => {});
++    console.warn('[App] Failed to create service view:', err);
++    win.webContents.executeJavaScript(
++      `document.getElementById('error-message').textContent = 'Uygulama baslatilamadi: ${escapeForSingleQuotedJs(String(err))}'; document.getElementById('error-screen')?.classList.remove('hidden');`
++    ).catch(() => {});
+     return;
+   }
+   activeView = view;
+ 
+-  setupViewEvents(win, view);
+-  loadChatGPTURL();
++  setupViewEvents(win, view, service);
++  loadServiceURL(service);
+   setupMenu(win, settings);
+   restoreZoomLevel();
+-
+   setupTray();
+ 
+   win.on('close', (event) => {
+     if (resizeTimer) {
+       clearTimeout(resizeTimer);
+       resizeTimer = null;
+     }
++    saveWindowState(win);
+     if (!getIsQuitting()) {
+       event.preventDefault();
+       win.hide();
+     }
+   });
++
++  win.on('resize', () => {
++    if (viewAdded && activeView === view && !win.isDestroyed()) {
++      if (resizeTimer) clearTimeout(resizeTimer);
++      resizeTimer = setTimeout(() => {
++        resizeViewToWindow(win);
++        resizeTimer = null;
++      }, RESIZE_DEBOUNCE_MS);
++    }
++  });
++
++  win.on('maximize', () => updateMaximizeButton(win));
++  win.on('unmaximize', () => updateMaximizeButton(win));
++}
++
++function saveWindowState(win: BrowserWindow): void {
++  const maximized = win.isMaximized();
++  if (!maximized) {
++    const bounds = win.getBounds();
++    settings.setWindow({
++      width: bounds.width,
++      height: bounds.height,
++      x: bounds.x,
++      y: bounds.y,
++    });
++  }
++  settings.setWindow({ isMaximized: maximized });
++  settings.saveSync();
++}
++
++function updateMaximizeButton(win: BrowserWindow): void {
++  if (win.isDestroyed()) return;
++  win.webContents.executeJavaScript(
++    `document.getElementById('maximize-btn')?.classList.toggle('is-maximized', ${win.isMaximized()});`
++  ).catch(() => {});
+ }
+ 
+ function escapeForSingleQuotedJs(value: string): string {
+   return value
+     .replace(/\\/g, '\\\\')
+     .replace(/'/g, "\\'")
+     .replace(/\r/g, '\\r')
+     .replace(/\n/g, '\\n')
+     .replace(/</g, '\\u003c')
+     .replace(/>/g, '\\u003e')
+     .replace(/\$\{/g, '\\${')
+     .replace(/`/g, '\\`');
+ }
+ 
+-function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView): void {
++function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView, service: AIService): void {
+   view.webContents.on('did-start-loading', () => {
+     if (win.isDestroyed()) return;
+     win.setProgressBar(-1, { mode: 'indeterminate' });
+-    win.webContents
+-      .executeJavaScript(
+-        `
+-      (() => {
+-        if (window.__splashTimer) {
+-          clearTimeout(window.__splashTimer);
+-          window.__splashTimer = null;
+-        }
++    win.webContents.executeJavaScript(
++      `(() => {
++        if (window.__splashTimer) { clearTimeout(window.__splashTimer); window.__splashTimer = null; }
+         document.getElementById('error-screen')?.classList.add('hidden');
+         document.getElementById('splash-screen')?.classList.remove('done', 'hidden');
+         document.getElementById('splash-screen')?.classList.add('active');
+-      })();
+-    `
+-      )
+-      .catch((err) => console.warn('Failed to show splash:', err));
++      })();`
++    ).catch((err) => console.warn('Failed to show splash:', err));
+   });
+ 
+   view.webContents.on('did-stop-loading', () => {
+     if (win.isDestroyed()) return;
+     win.setProgressBar(-1, { mode: 'none' });
+     if (!viewAdded && activeView === view) {
+       win.contentView.addChildView(view);
+-      resizeView(win, view);
++      resizeViewToWindow(win);
+       viewAdded = true;
+       view.webContents.focus();
+     }
+-    win.webContents
+-      .executeJavaScript(
+-        `
+-      (() => {
++    win.webContents.executeJavaScript(
++      `(() => {
+         const splash = document.getElementById('splash-screen');
+         if (splash) splash.classList.add('done');
+         if (window.__splashTimer) clearTimeout(window.__splashTimer);
+         window.__splashTimer = setTimeout(() => {
+           if (splash) splash.classList.add('hidden');
+           window.__splashTimer = null;
+         }, ${LOADING_BAR_TIMEOUT_MS + 300});
+-      })();
+-    `
+-      )
+-      .catch((err) => console.warn('Failed to hide splash:', err));
++      })();`
++    ).catch((err) => console.warn('Failed to hide splash:', err));
+   });
+ 
+   view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+     if (win.isDestroyed()) return;
+-    // Ignore aborted loads and subframe failures
+-    if (!isMainFrame || errorCode === -3) {
+-      return;
+-    }
++    if (!isMainFrame || errorCode === -3) return;
+ 
+     win.setProgressBar(-1, { mode: 'none' });
+     if (viewAdded && activeView === view) {
+-      try {
+-        win.contentView.removeChildView(view);
+-      } catch {
+-        // View may already be detached
+-      }
++      try { win.contentView.removeChildView(view); } catch {}
+       viewAdded = false;
+     }
+ 
+     const escaped = escapeForSingleQuotedJs(errorDescription || 'Bilinmeyen hata');
+-    win.webContents
+-      .executeJavaScript(
+-        `
+-      (() => {
++    win.webContents.executeJavaScript(
++      `(() => {
+         document.getElementById('splash-screen')?.classList.add('hidden');
+         const msg = document.getElementById('error-message');
+         if (msg) msg.textContent = '${escaped}';
+         document.getElementById('error-screen')?.classList.remove('hidden');
+-      })();
+-    `
+-      )
+-      .catch((err) => console.warn('Failed to show error screen:', err));
+-  });
+-
+-  win.on('resize', () => {
+-    if (viewAdded && activeView === view && !win.isDestroyed()) {
+-      if (resizeTimer) clearTimeout(resizeTimer);
+-      resizeTimer = setTimeout(() => {
+-        resizeView(win, view);
+-        resizeTimer = null;
+-      }, RESIZE_DEBOUNCE_MS);
+-    }
+-  });
+-}
+-
+-function resizeView(win: BrowserWindow, view: Electron.WebContentsView): void {
+-  if (win.isDestroyed() || view.webContents.isDestroyed()) {
+-    return;
+-  }
+-  const contentBounds = win.getContentBounds();
+-  view.setBounds({
+-    x: 0,
+-    y: 0,
+-    width: contentBounds.width,
+-    height: contentBounds.height,
++      })();`
++    ).catch((err) => console.warn('Failed to show error screen:', err));
+   });
+ }
+diff --git a/src/main/menu.ts b/src/main/menu.ts
+index 7cef610..8608b77 100644
+--- a/src/main/menu.ts
++++ b/src/main/menu.ts
+@@ -1,46 +1,67 @@
+ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, dialog } from 'electron';
+ import {
+-  navigateToChatGPT,
+-  reloadChatGPT,
++  reloadService,
+   goBack,
+   goForward,
+   zoomIn,
+   zoomOut,
+   zoomReset,
+-} from './chatgpt-view';
++  getCurrentServiceId,
++  switchToService,
++} from './service-view';
++import { SERVICE_CATEGORIES, getServiceById } from './services';
+ import type { SettingsStore } from './settings-store';
+ import { setQuitting } from './app-state';
+-import { CHATGPT_URL } from './constants';
+ 
+ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+   const isDev = !app.isPackaged;
+ 
++  const servislerSubmenu: MenuItemConstructorOptions[] = [];
++  for (const cat of SERVICE_CATEGORIES) {
++    servislerSubmenu.push({
++      label: `ÔöÇÔöÇ ${cat.name} ÔöÇÔöÇ`,
++      enabled: false,
++    });
++    for (const svc of cat.services) {
++      servislerSubmenu.push({
++        label: svc.name,
++        click: () => switchToService(svc.id, win, settings),
++      });
++    }
++    servislerSubmenu.push({ type: 'separator' });
++  }
++
+   const template: MenuItemConstructorOptions[] = [
+     {
+       label: 'Uygulama',
+       submenu: [
+         {
+-          label: 'ChatGPT Ana Sayfas─▒',
++          label: 'Servis De─şi┼ştir',
+           accelerator: 'CmdOrCtrl+L',
+-          click: () => navigateToChatGPT(),
++          click: () => {
++            win.webContents.focus();
++            win.webContents.executeJavaScript(
++              "document.getElementById('category-select')?.focus();"
++            ).catch(() => {});
++          },
+         },
+         { type: 'separator' },
+         {
+           label: 'Yenile',
+           accelerator: 'CmdOrCtrl+R',
+-          click: () => reloadChatGPT(false),
++          click: () => reloadService(false),
+         },
+         {
+           label: '├ûnbelle─şi Yok Sayarak Yenile',
+           accelerator: 'CmdOrCtrl+Shift+R',
+-          click: () => reloadChatGPT(true),
++          click: () => reloadService(true),
+         },
+         { type: 'separator' },
+         {
+           label: 'Uygulamay─▒ Yeniden Ba┼şlat',
+           click: () => {
+             setQuitting(true);
+             app.relaunch();
+             app.quit();
+           },
+         },
+@@ -48,20 +69,24 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+         {
+           label: '├ç─▒k─▒┼ş',
+           accelerator: 'CmdOrCtrl+Q',
+           click: () => {
+             setQuitting(true);
+             app.quit();
+           },
+         },
+       ],
+     },
++    {
++      label: 'Servisler',
++      submenu: servislerSubmenu,
++    },
+     {
+       label: 'G├Âr├╝n├╝m',
+       submenu: [
+         {
+           label: 'Yak─▒nla┼şt─▒r',
+           accelerator: 'CmdOrCtrl+=',
+           click: () => zoomIn(),
+         },
+         {
+           label: 'Uzakla┼şt─▒r',
+@@ -70,23 +95,21 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+         },
+         {
+           label: 'Yak─▒nla┼şt─▒rmay─▒ S─▒f─▒rla',
+           accelerator: 'CmdOrCtrl+0',
+           click: () => zoomReset(),
+         },
+         { type: 'separator' },
+         {
+           label: 'Tam Ekran',
+           accelerator: 'F11',
+-          click: () => {
+-            win.setFullScreen(!win.isFullScreen());
+-          },
++          click: () => { win.setFullScreen(!win.isFullScreen()); },
+         },
+       ],
+     },
+     {
+       label: 'Gezinme',
+       submenu: [
+         {
+           label: 'Geri',
+           accelerator: 'Alt+Left',
+           click: () => goBack(),
+@@ -95,48 +118,50 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+           label: '─░leri',
+           accelerator: 'Alt+Right',
+           click: () => goForward(),
+         },
+       ],
+     },
+     {
+       label: 'Yard─▒m',
+       submenu: [
+         {
+-          label: "ChatGPT'yi Taray─▒c─▒da A├ğ",
++          label: 'Servisi Taray─▒c─▒da A├ğ',
+           click: () => {
+-            shell.openExternal(CHATGPT_URL).catch((err) => console.warn('Failed to open browser:', err));
++            const id = getCurrentServiceId();
++            if (id) {
++              const svc = getServiceById(id);
++              if (svc) shell.openExternal(svc.url).catch((err) => console.warn('Failed to open browser:', err));
++            }
+           },
+         },
+         { type: 'separator' },
+         {
+           label: 'Uygulama S├╝r├╝m├╝',
+           click: () => {
+             dialog.showMessageBox(win, {
+               type: 'info',
+-              title: 'ChatGPT Desktop',
+-              message: `ChatGPT Desktop v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
++              title: 'AI Desktop',
++              message: `AI Desktop v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
+             }).catch((err) => console.warn('Failed to show version dialog:', err));
+           },
+         },
+       ],
+     },
+   ];
+ 
+   if (isDev) {
+     template.push({
+       label: 'Geli┼ştirme',
+       submenu: [
+         {
+           label: 'Geli┼ştirici Ara├ğlar─▒',
+           accelerator: 'CmdOrCtrl+Shift+I',
+-          click: () => {
+-            win.webContents.toggleDevTools();
+-          },
++          click: () => { win.webContents.toggleDevTools(); },
+         },
+       ],
+     });
+   }
+ 
+   const menu = Menu.buildFromTemplate(template);
+   Menu.setApplicationMenu(menu);
+ }
+diff --git a/src/main/service-view.ts b/src/main/service-view.ts
+new file mode 100644
+index 0000000..6eeb955
+--- /dev/null
++++ b/src/main/service-view.ts
+@@ -0,0 +1,167 @@
++import { BrowserWindow, WebContentsView } from 'electron';
++import { setupNavigationPolicy } from './navigation-policy';
++import { setupPermissions } from './permissions';
++import { setupDownloads } from './downloads';
++import { ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, DEFAULT_ZOOM_LEVEL, TITLE_BAR_HEIGHT } from './constants';
++import type { SettingsStore } from './settings-store';
++import { getServiceById, getDefaultService } from './services';
++import type { AIService } from './services';
++
++let currentView: WebContentsView | null = null;
++let settingsRef: SettingsStore | null = null;
++let currentServiceId: string | null = null;
++
++export function getCurrentView(): WebContentsView | null {
++  return currentView;
++}
++
++export function getCurrentServiceId(): string | null {
++  return currentServiceId;
++}
++
++export function setSettingsStore(settings: SettingsStore): void {
++  settingsRef = settings;
++}
++
++function destroyExistingView(): void {
++  if (!currentView) return;
++
++  const wins = BrowserWindow.getAllWindows();
++  for (const win of wins) {
++    if (!win.isDestroyed()) {
++      try {
++        win.contentView.removeChildView(currentView);
++      } catch {
++        // View may not be attached
++      }
++    }
++  }
++
++  try {
++    const wc = currentView.webContents;
++    if (!wc.isDestroyed()) {
++      wc.close();
++    }
++  } catch (err) {
++    console.warn('[ServiceView] Failed to close previous view:', err);
++  }
++  currentView = null;
++  currentServiceId = null;
++}
++
++export function createServiceView(service: AIService): WebContentsView {
++  destroyExistingView();
++
++  const view = new WebContentsView({
++    webPreferences: {
++      nodeIntegration: false,
++      contextIsolation: true,
++      sandbox: true,
++      webSecurity: true,
++    },
++  });
++
++  setupNavigationPolicy(view);
++  setupPermissions(view);
++  setupDownloads(view);
++
++  currentView = view;
++  currentServiceId = service.id;
++  return view;
++}
++
++export function loadServiceURL(service: AIService): void {
++  if (currentView && !currentView.webContents.isDestroyed()) {
++    currentView.webContents.loadURL(service.url);
++    currentServiceId = service.id;
++  }
++}
++
++export function reloadService(ignoreCache: boolean = false): void {
++  if (currentView && !currentView.webContents.isDestroyed()) {
++    if (ignoreCache) {
++      currentView.webContents.reloadIgnoringCache();
++    } else {
++      currentView.webContents.reload();
++    }
++  }
++}
++
++export function goBack(): void {
++  if (currentView && !currentView.webContents.isDestroyed() && currentView.webContents.navigationHistory.canGoBack()) {
++    currentView.webContents.navigationHistory.goBack();
++  }
++}
++
++export function goForward(): void {
++  if (currentView && !currentView.webContents.isDestroyed() && currentView.webContents.navigationHistory.canGoForward()) {
++    currentView.webContents.navigationHistory.goForward();
++  }
++}
++
++function persistZoomFactor(factor: number): void {
++  if (!settingsRef) return;
++  settingsRef.setWindow({ zoomLevel: factor });
++  settingsRef.save();
++}
++
++function applyZoomFactor(factor: number): void {
++  if (!currentView || currentView.webContents.isDestroyed()) return;
++  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, factor));
++  currentView.webContents.setZoomFactor(clamped);
++  persistZoomFactor(clamped);
++}
++
++export function restoreZoomLevel(): void {
++  if (!currentView || currentView.webContents.isDestroyed()) return;
++  const factor = settingsRef?.getWindow().zoomLevel ?? DEFAULT_ZOOM_LEVEL;
++  currentView.webContents.setZoomFactor(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, factor)));
++}
++
++export function zoomIn(): void {
++  if (!currentView || currentView.webContents.isDestroyed()) return;
++  const current = currentView.webContents.getZoomFactor();
++  applyZoomFactor(current + ZOOM_STEP);
++}
++
++export function zoomOut(): void {
++  if (!currentView || currentView.webContents.isDestroyed()) return;
++  const current = currentView.webContents.getZoomFactor();
++  applyZoomFactor(current - ZOOM_STEP);
++}
++
++export function zoomReset(): void {
++  applyZoomFactor(DEFAULT_ZOOM_LEVEL);
++}
++
++export function resizeViewToWindow(win: BrowserWindow): void {
++  if (!currentView || currentView.webContents.isDestroyed() || win.isDestroyed()) return;
++  const contentBounds = win.getContentBounds();
++  currentView.setBounds({
++    x: 0,
++    y: TITLE_BAR_HEIGHT,
++    width: contentBounds.width,
++    height: contentBounds.height - TITLE_BAR_HEIGHT,
++  });
++}
++
++export function switchToService(serviceId: string, win: BrowserWindow, settings: SettingsStore): void {
++  const service = getServiceById(serviceId) ?? getDefaultService();
++
++  settings.setWindow({ lastService: service.id });
++  settings.save();
++
++  createServiceView(service);
++  loadServiceURL(service);
++
++  win.setTitle(`AI Desktop - ${service.name}`);
++  const name = service.name.replace(/'/g, "\\'");
++  win.webContents.executeJavaScript(
++    `(() => {
++      document.getElementById('titlebar-text')!.textContent = 'AI Desktop - ${name}';
++      document.getElementById('splash-subtitle')!.textContent = '${name}';
++      document.getElementById('service-select')!.value = '${service.id}';
++      document.title = 'AI Desktop - ${name}';
++    })();`
++  ).catch(() => {});
++}
+diff --git a/src/main/services.ts b/src/main/services.ts
+new file mode 100644
+index 0000000..0d791c8
+--- /dev/null
++++ b/src/main/services.ts
+@@ -0,0 +1,113 @@
++export interface AIService {
++  id: string;
++  name: string;
++  url: string;
++  category: string;
++}
++
++export interface AIServiceCategory {
++  name: string;
++  key: string;
++  services: AIService[];
++}
++
++export const SERVICE_CATEGORIES: AIServiceCategory[] = [
++  {
++    name: 'Sohbet',
++    key: 'chat',
++    services: [
++      { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', category: 'chat' },
++      { id: 'claude', name: 'Claude', url: 'https://claude.ai', category: 'chat' },
++      { id: 'perplexity', name: 'Perplexity AI', url: 'https://www.perplexity.ai', category: 'chat' },
++      { id: 'copilot', name: 'Microsoft Copilot', url: 'https://copilot.microsoft.com', category: 'chat' },
++      { id: 'grok', name: 'Grok', url: 'https://grok.com', category: 'chat' },
++      { id: 'deepseek', name: 'DeepSeek Chat', url: 'https://chat.deepseek.com', category: 'chat' },
++      { id: 'poe', name: 'Poe', url: 'https://poe.com', category: 'chat' },
++      { id: 'lechat', name: 'Mistral Le Chat', url: 'https://chat.mistral.ai', category: 'chat' },
++      { id: 'metaai', name: 'Meta AI', url: 'https://www.meta.ai', category: 'chat' },
++      { id: 'qwen', name: 'Qwen Chat', url: 'https://chat.qwen.ai', category: 'chat' },
++      { id: 'huggingchat', name: 'HuggingChat', url: 'https://huggingface.co/chat', category: 'chat' },
++      { id: 'youcom', name: 'You.com', url: 'https://you.com', category: 'chat' },
++      { id: 'phind', name: 'Phind', url: 'https://www.phind.com', category: 'chat' },
++      { id: 'blackbox', name: 'Blackbox AI', url: 'https://www.blackbox.ai', category: 'chat' },
++      { id: 'genspark', name: 'Genspark', url: 'https://genspark.ai', category: 'chat' },
++      { id: 'felo', name: 'Felo AI', url: 'https://felo.ai', category: 'chat' },
++      { id: 'kimi', name: 'Kimi AI', url: 'https://kimi.ai', category: 'chat' },
++      { id: 'pi', name: 'Pi AI', url: 'https://pi.ai', category: 'chat' },
++      { id: 'characterai', name: 'Character.AI', url: 'https://character.ai', category: 'chat' },
++      { id: 'janitorai', name: 'Janitor AI', url: 'https://janitorai.com', category: 'chat' },
++      { id: 'chubai', name: 'Chub AI', url: 'https://chub.ai', category: 'chat' },
++    ],
++  },
++  {
++    name: 'G├Ârsel',
++    key: 'image',
++    services: [
++      { id: 'midjourney', name: 'Midjourney', url: 'https://www.midjourney.com', category: 'image' },
++      { id: 'leonardo', name: 'Leonardo AI', url: 'https://leonardo.ai', category: 'image' },
++      { id: 'ideogram', name: 'Ideogram', url: 'https://ideogram.ai', category: 'image' },
++      { id: 'playground', name: 'Playground AI', url: 'https://playground.com', category: 'image' },
++      { id: 'firefly', name: 'Adobe Firefly', url: 'https://firefly.adobe.com', category: 'image' },
++      { id: 'flux', name: 'FLUX Playground', url: 'https://flux1.ai', category: 'image' },
++    ],
++  },
++  {
++    name: 'Video',
++    key: 'video',
++    services: [
++      { id: 'runway', name: 'Runway', url: 'https://runwayml.com', category: 'video' },
++      { id: 'pika', name: 'Pika', url: 'https://pika.art', category: 'video' },
++      { id: 'kling', name: 'Kling AI', url: 'https://klingai.com', category: 'video' },
++      { id: 'hailuo', name: 'Hailuo AI', url: 'https://hailuoai.video', category: 'video' },
++      { id: 'luma', name: 'Luma AI', url: 'https://lumalabs.ai', category: 'video' },
++    ],
++  },
++  {
++    name: 'Ses/Video Sentez',
++    key: 'audio',
++    services: [
++      { id: 'heygen', name: 'HeyGen', url: 'https://www.heygen.com', category: 'audio' },
++      { id: 'synthesia', name: 'Synthesia', url: 'https://www.synthesia.io', category: 'audio' },
++      { id: 'elevenlabs', name: 'ElevenLabs', url: 'https://elevenlabs.io', category: 'audio' },
++      { id: 'suno', name: 'Suno', url: 'https://suno.com', category: 'audio' },
++      { id: 'udio', name: 'Udio', url: 'https://udio.com', category: 'audio' },
++    ],
++  },
++  {
++    name: 'Kod',
++    key: 'code',
++    services: [
++      { id: 'bolt', name: 'Bolt.new', url: 'https://bolt.new', category: 'code' },
++      { id: 'lovable', name: 'Lovable', url: 'https://lovable.dev', category: 'code' },
++      { id: 'replit', name: 'Replit', url: 'https://replit.com', category: 'code' },
++      { id: 'cursor', name: 'Cursor', url: 'https://cursor.com', category: 'code' },
++      { id: 'windsurf', name: 'Windsurf', url: 'https://windsurf.com', category: 'code' },
++      { id: 'codeium', name: 'Codeium', url: 'https://codeium.com', category: 'code' },
++      { id: 'tabnine', name: 'Tabnine', url: 'https://www.tabnine.com', category: 'code' },
++      { id: 'devin', name: 'Devin', url: 'https://devin.ai', category: 'code' },
++      { id: 'openhands', name: 'OpenHands', url: 'https://openhands.dev', category: 'code' },
++      { id: 'manus', name: 'Manus AI', url: 'https://manus.im', category: 'code' },
++    ],
++  },
++  {
++    name: 'Sunum/├£retkenlik',
++    key: 'productivity',
++    services: [
++      { id: 'gamma', name: 'Gamma', url: 'https://gamma.app', category: 'productivity' },
++      { id: 'napkin', name: 'Napkin AI', url: 'https://napkin.ai', category: 'productivity' },
++      { id: 'mem', name: 'Mem.ai', url: 'https://mem.ai', category: 'productivity' },
++    ],
++  },
++];
++
++export function getAllServices(): AIService[] {
++  return SERVICE_CATEGORIES.flatMap(c => c.services);
++}
++
++export function getServiceById(id: string): AIService | undefined {
++  return getAllServices().find(s => s.id === id);
++}
++
++export function getDefaultService(): AIService {
++  return { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', category: 'chat' };
++}
+diff --git a/src/main/settings-store.ts b/src/main/settings-store.ts
+index 02b0359..4e5b648 100644
+--- a/src/main/settings-store.ts
++++ b/src/main/settings-store.ts
+@@ -11,35 +11,37 @@ import {
+ } from './constants';
+ 
+ export interface WindowSettings {
+   width: number;
+   height: number;
+   x: number | undefined;
+   y: number | undefined;
+   isMaximized: boolean;
+   /** Zoom factor (1.0 = 100%) */
+   zoomLevel: number;
++  lastService: string;
+ }
+ 
+ export interface AppSettings {
+   window: WindowSettings;
+   minimizeToTray: boolean;
+ }
+ 
+ const DEFAULT_SETTINGS: AppSettings = {
+   window: {
+     width: DEFAULT_WINDOW_WIDTH,
+     height: DEFAULT_WINDOW_HEIGHT,
+     x: undefined,
+     y: undefined,
+     isMaximized: false,
+     zoomLevel: DEFAULT_ZOOM_LEVEL,
++    lastService: 'chatgpt',
+   },
+   minimizeToTray: false,
+ };
+ 
+ function clampZoom(factor: number): number {
+   if (!Number.isFinite(factor)) {
+     return DEFAULT_ZOOM_LEVEL;
+   }
+   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, factor));
+ }
+diff --git a/src/main/tray.ts b/src/main/tray.ts
+index 28c0e97..8599afa 100644
+--- a/src/main/tray.ts
++++ b/src/main/tray.ts
+@@ -1,13 +1,12 @@
+ import { app, Menu, Tray, nativeImage } from 'electron';
+ import { getMainWindow } from './window-manager';
+-import { navigateToChatGPT } from './chatgpt-view';
+ import { setQuitting } from './app-state';
+ import * as path from 'path';
+ 
+ let tray: Tray | null = null;
+ 
+ export function setupTray(): void {
+   if (tray) return;
+ 
+   let icon: Electron.NativeImage;
+   const iconPath = path.join(__dirname, '../../assets/icon.ico');
+@@ -15,36 +14,45 @@ export function setupTray(): void {
+   try {
+     icon = nativeImage.createFromPath(iconPath);
+     if (icon.isEmpty()) {
+       icon = nativeImage.createEmpty();
+     }
+   } catch {
+     icon = nativeImage.createEmpty();
+   }
+ 
+   tray = new Tray(icon);
+-  tray.setToolTip('ChatGPT Desktop');
++  tray.setToolTip('AI Desktop');
+ 
+   const contextMenu = Menu.buildFromTemplate([
+     {
+       label: 'Uygulamay─▒ G├Âster',
+       click: () => {
+         const win = getMainWindow();
+         if (win) {
+           win.show();
+           win.focus();
+         }
+       },
+     },
+     {
+-      label: "ChatGPT Ana Sayfas─▒na Git",
+-      click: () => navigateToChatGPT(),
++      label: 'Servis De─şi┼ştir',
++      click: () => {
++        const win = getMainWindow();
++        if (win) {
++          win.show();
++          win.focus();
++          win.webContents.executeJavaScript(
++            "document.getElementById('category-select')?.focus();"
++          ).catch(() => {});
++        }
++      },
+     },
+     { type: 'separator' },
+     {
+       label: '├ç─▒k─▒┼ş',
+       click: () => {
+         setQuitting(true);
+         app.quit();
+       },
+     },
+   ]);
+diff --git a/src/main/window-manager.ts b/src/main/window-manager.ts
+index 9ba4084..8133568 100644
+--- a/src/main/window-manager.ts
++++ b/src/main/window-manager.ts
+@@ -17,20 +17,22 @@ export function createMainWindow(settings: SettingsStore): BrowserWindow {
+   const winSettings = settings.getWindow();
+ 
+   const win = new BrowserWindow({
+     width: winSettings.width,
+     height: winSettings.height,
+     x: winSettings.x,
+     y: winSettings.y,
+     minWidth: MIN_WINDOW_WIDTH,
+     minHeight: MIN_WINDOW_HEIGHT,
+     show: false,
++    frame: false,
++    titleBarStyle: 'hidden',
+     icon: path.join(__dirname, '../../assets/icon.ico'),
+     webPreferences: {
+       preload: path.join(__dirname, '../preload/preload.js'),
+       nodeIntegration: false,
+       contextIsolation: true,
+       sandbox: true,
+       webSecurity: true,
+     },
+   });
+ 
+diff --git a/src/preload/preload.ts b/src/preload/preload.ts
+index c08f55c..3edce82 100644
+--- a/src/preload/preload.ts
++++ b/src/preload/preload.ts
+@@ -1,12 +1,11 @@
+ import { contextBridge, ipcRenderer } from 'electron';
+-import { CHATGPT_URL } from '../main/constants';
+ 
+-contextBridge.exposeInMainWorld('chatgptDesktop', {
+-  chatgptUrl: CHATGPT_URL,
+-  retryLoad: (): void => {
+-    ipcRenderer.send('retry-load');
+-  },
+-  openExternal: (url: string): void => {
+-    ipcRenderer.send('open-external', url);
+-  },
++contextBridge.exposeInMainWorld('aiDesktop', {
++  getServices: (): Promise<any[]> => ipcRenderer.invoke('get-services'),
++  minimize: (): void => ipcRenderer.send('window-minimize'),
++  maximize: (): void => ipcRenderer.send('window-maximize'),
++  close: (): void => ipcRenderer.send('window-close'),
++  selectService: (id: string): void => ipcRenderer.send('service-select', id),
++  retryLoad: (): void => ipcRenderer.send('retry-load'),
++  openExternal: (url: string): void => ipcRenderer.send('open-external', url),
+ });
+diff --git a/src/renderer/global.d.ts b/src/renderer/global.d.ts
+index 1c2ce18..4f118c0 100644
+--- a/src/renderer/global.d.ts
++++ b/src/renderer/global.d.ts
+@@ -1,9 +1,16 @@
+-interface ChatGPTDesktopAPI {
+-  chatgptUrl: string;
+-  retryLoad: () => void;
+-  openExternal: (url: string) => void;
++export interface AiDesktopAPI {
++  getServices(): Promise<any[]>;
++  minimize(): void;
++  maximize(): void;
++  close(): void;
++  selectService(id: string): void;
++  retryLoad(): void;
++  openExternal(url: string): void;
+ }
+ 
+-interface Window {
+-  chatgptDesktop: ChatGPTDesktopAPI;
++declare global {
++  interface Window {
++    aiDesktop: AiDesktopAPI;
++    chatgptDesktop: any;
++  }
+ }
+diff --git a/src/renderer/index.html b/src/renderer/index.html
+index b78bd55..38a7bd0 100644
+--- a/src/renderer/index.html
++++ b/src/renderer/index.html
+@@ -1,42 +1,59 @@
+ <!DOCTYPE html>
+ <html lang="tr">
+ <head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+-  <title>ChatGPT Desktop</title>
++  <title>AI Desktop</title>
+   <link rel="stylesheet" href="./styles.css">
+ </head>
+ <body>
+-  <div id="splash-screen" class="active">
+-    <div class="splash-bg"></div>
+-    <div class="splash-content">
+-      <svg class="splash-logo" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
+-        <path d="m297.06 130.97c7.26-21.79 4.76-45.66-6.85-65.48-17.46-30.4-52.56-46.04-86.84-38.68-15.25-17.18-37.16-26.95-60.13-26.81-35.04-.08-66.13 22.48-76.91 55.82-22.51 4.61-41.94 18.7-53.31 38.67-17.59 30.32-13.58 68.54 9.92 94.54-7.26 21.79-4.76 45.66 6.85 65.48 17.46 30.4 52.56 46.04 86.84 38.68 15.24 17.18 37.16 26.95 60.13 26.8 35.06.09 66.16-22.49 76.94-55.86 22.51-4.61 41.94-18.7 53.31-38.67 17.57-30.32 13.55-68.51-9.94-94.51zm-120.28 168.11c-14.03.02-27.62-4.89-38.39-13.88.49-.26 1.34-.73 1.89-1.07l63.72-36.8c3.26-1.85 5.26-5.32 5.24-9.07v-89.83l26.93 15.55c.29.14.48.42.52.74v74.39c-.04 33.08-26.83 59.9-59.91 59.97zm-128.84-55.03c-7.03-12.14-9.56-26.37-7.15-40.18.47.28 1.3.79 1.89 1.13l63.72 36.8c3.23 1.89 7.23 1.89 10.47 0l77.79-44.92v31.1c.02.32-.13.63-.38.83l-64.41 37.19c-28.69 16.52-65.33 6.7-81.92-21.95zm-16.77-139.09c7-12.16 18.05-21.46 31.21-26.29 0 .55-.03 1.52-.03 2.2v73.61c-.02 3.74 1.98 7.21 5.23 9.06l77.79 44.91-26.93 15.55c-.27.18-.61.21-.91.08l-64.42-37.22c-28.63-16.58-38.45-53.21-21.95-81.89zm221.26 51.49-77.79-44.92 26.93-15.54c.27-.18.61-.21.91-.08l64.42 37.19c28.68 16.57 38.51 53.26 21.94 81.94-7.01 12.14-18.05 21.44-31.2 26.28v-75.81c.03-3.74-1.96-7.2-5.2-9.06zm26.8-40.34c-.47-.29-1.3-.79-1.89-1.13l-63.72-36.8c-3.23-1.89-7.23-1.89-10.47 0l-77.79 44.92v-31.1c-.02-.32.13-.63.38-.83l64.41-37.16c28.69-16.55 65.37-6.7 81.91 22 6.99 12.12 9.52 26.31 7.15 40.1zm-168.51 55.43-26.94-15.55c-.29-.14-.48-.42-.52-.74v-74.39c.02-33.12 26.89-59.96 60.01-59.94 14.01 0 27.57 4.92 38.34 13.88-.49.26-1.33.73-1.89 1.07l-63.72 36.8c-3.26 1.85-5.26 5.31-5.24 9.06l-.04 89.79zm14.63-31.54 34.65-20.01 34.65 20v40.01l-34.65 20-34.65-20z" fill="#ffffff"/>
+-      </svg>
+-      <h1 class="splash-title">ChatGPT</h1>
+-      <p class="splash-subtitle">Masa├╝st├╝ Uygulamas─▒</p>
+-      <div class="splash-loader">
+-        <div class="splash-loader-track">
+-          <div class="splash-loader-bar"></div>
+-        </div>
++  <div id="titlebar" class="titlebar">
++    <div class="titlebar-drag">
++      <span class="titlebar-text">AI Desktop</span>
++    </div>
++    <div class="titlebar-controls">
++      <select id="category-select" class="titlebar-select" aria-label="Kategori">
++        <option value="">Kategori Se├ğ</option>
++      </select>
++      <select id="service-select" class="titlebar-select" aria-label="Servis">
++        <option value="">Servis Se├ğ</option>
++      </select>
++      <div class="titlebar-btns">
++        <button id="minimize-btn" class="titlebar-btn" title="K├╝├ğ├╝lt">ÔöÇ</button>
++        <button id="maximize-btn" class="titlebar-btn" title="B├╝y├╝t">Ôûí</button>
++        <button id="close-btn" class="titlebar-btn titlebar-close" title="Kapat">Ô£ò</button>
+       </div>
+-      <p class="splash-status">Ba─şlan─▒yor...</p>
+     </div>
+   </div>
+ 
+-  <div id="error-screen" class="hidden">
+-    <div class="error-content">
+-      <h1>Ba─şlant─▒ Hatas─▒</h1>
+-      <p id="error-message">ChatGPT y├╝klenirken bir hata olu┼ştu.</p>
+-      <p class="error-hint">─░nternet ba─şlant─▒n─▒z─▒ kontrol edin ve tekrar deneyin.</p>
+-      <div class="error-actions">
+-        <button id="retry-button" class="btn btn-primary">Yeniden Dene</button>
+-        <button id="open-browser-button" class="btn btn-secondary">ChatGPT'yi Taray─▒c─▒da A├ğ</button>
++  <div id="content-area" class="content-area">
++    <div id="splash-screen" class="active">
++      <div class="splash-bg"></div>
++      <div class="splash-content">
++        <h1 class="splash-title">AI Desktop</h1>
++        <p class="splash-subtitle" id="splash-subtitle">Y├╝kleniyor...</p>
++        <div class="splash-loader">
++          <div class="splash-loader-track">
++            <div class="splash-loader-bar"></div>
++          </div>
++        </div>
++        <p class="splash-status" id="splash-status">Ba─şlan─▒yor...</p>
++      </div>
++    </div>
++
++    <div id="error-screen" class="hidden">
++      <div class="error-content">
++        <h1>Ba─şlant─▒ Hatas─▒</h1>
++        <p id="error-message">Servis y├╝klenirken bir hata olu┼ştu.</p>
++        <p class="error-hint">─░nternet ba─şlant─▒n─▒z─▒ kontrol edin veya farkl─▒ bir servis se├ğin.</p>
++        <div class="error-actions">
++          <button id="retry-button" class="btn btn-primary">Yeniden Dene</button>
++        </div>
+       </div>
+     </div>
+   </div>
+ 
+   <script type="module" src="./renderer.js"></script>
+ </body>
+ </html>
+diff --git a/src/renderer/renderer.ts b/src/renderer/renderer.ts
+index e1de7ed..38da1be 100644
+--- a/src/renderer/renderer.ts
++++ b/src/renderer/renderer.ts
+@@ -1,19 +1,98 @@
++const titlebarText = document.getElementById('titlebar-text')!;
++const categorySelect = document.getElementById('category-select') as HTMLSelectElement;
++const serviceSelect = document.getElementById('service-select') as HTMLSelectElement;
+ const splashScreen = document.getElementById('splash-screen')!;
++const splashSubtitle = document.getElementById('splash-subtitle')!;
++const splashStatus = document.getElementById('splash-status')!;
+ const errorScreen = document.getElementById('error-screen')!;
++const errorMessage = document.getElementById('error-message')!;
+ const retryButton = document.getElementById('retry-button')!;
+-const openBrowserButton = document.getElementById('open-browser-button')!;
+ 
+-window.addEventListener('DOMContentLoaded', () => {
++interface AIService {
++  id: string;
++  name: string;
++  url: string;
++  category: string;
++}
++
++interface AIServiceCategory {
++  name: string;
++  key: string;
++  services: AIService[];
++}
++
++let categories: AIServiceCategory[] = [];
++let currentServiceId: string | null = null;
++
++window.addEventListener('DOMContentLoaded', async () => {
+   splashScreen.classList.add('active');
++
++  const minimizeBtn = document.getElementById('minimize-btn')!;
++  const maximizeBtn = document.getElementById('maximize-btn')!;
++  const closeBtn = document.getElementById('close-btn')!;
++
++  minimizeBtn.addEventListener('click', () => window.aiDesktop.minimize());
++  maximizeBtn.addEventListener('click', () => window.aiDesktop.maximize());
++  closeBtn.addEventListener('click', () => window.aiDesktop.close());
++
++  categories = await window.aiDesktop.getServices();
++  populateCategories();
+ });
+ 
+-retryButton.addEventListener('click', () => {
++function populateCategories(): void {
++  categorySelect.innerHTML = '<option value="">Kategori Se├ğ</option>';
++  for (const cat of categories) {
++    const option = document.createElement('option');
++    option.value = cat.key;
++    option.textContent = cat.name;
++    categorySelect.appendChild(option);
++  }
++
++  categorySelect.addEventListener('change', () => {
++    const key = categorySelect.value;
++    populateServices(key);
++  });
++
++  serviceSelect.addEventListener('change', () => {
++    const id = serviceSelect.value;
++    if (id) {
++      switchToService(id);
++    }
++  });
++}
++
++function populateServices(categoryKey: string): void {
++  serviceSelect.innerHTML = '<option value="">Servis Se├ğ</option>';
++  const cat = categories.find(c => c.key === categoryKey);
++  if (!cat) return;
++
++  for (const svc of cat.services) {
++    const option = document.createElement('option');
++    option.value = svc.id;
++    option.textContent = svc.name;
++    serviceSelect.appendChild(option);
++  }
++}
++
++function switchToService(serviceId: string): void {
++  currentServiceId = serviceId;
+   errorScreen.classList.add('hidden');
+   splashScreen.classList.remove('done', 'hidden');
+   splashScreen.classList.add('active');
+-  window.chatgptDesktop.retryLoad();
+-});
++  splashStatus.textContent = 'Ba─şlan─▒yor...';
++
++  const svc = categories.flatMap(c => c.services).find(s => s.id === serviceId);
++  if (svc) {
++    splashSubtitle.textContent = svc.name;
++    titlebarText.textContent = `AI Desktop - ${svc.name}`;
++    document.title = `AI Desktop - ${svc.name}`;
++  }
+ 
+-openBrowserButton.addEventListener('click', () => {
+-  window.chatgptDesktop.openExternal(window.chatgptDesktop.chatgptUrl);
++  window.aiDesktop.selectService(serviceId);
++}
++
++retryButton.addEventListener('click', () => {
++  if (currentServiceId) {
++    switchToService(currentServiceId);
++  }
+ });
+diff --git a/src/renderer/styles.css b/src/renderer/styles.css
+index e5dd2a3..33584bf 100644
+--- a/src/renderer/styles.css
++++ b/src/renderer/styles.css
+@@ -1,204 +1,272 @@
+ * {
+   margin: 0;
+   padding: 0;
+   box-sizing: border-box;
+ }
+ 
+-body {
+-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+-  background: #212121;
+-  color: #ececec;
++html, body {
++  width: 100%;
++  height: 100%;
+   overflow: hidden;
+-  height: 100vh;
++  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
++  background: #1a1a2e;
++  color: #fff;
+ }
+ 
+-#splash-screen {
++/* Title Bar */
++.titlebar {
+   position: fixed;
+   top: 0;
+   left: 0;
+-  width: 100%;
+-  height: 100%;
++  right: 0;
++  height: 38px;
++  background: #16213e;
++  display: flex;
++  align-items: center;
++  padding: 0 8px;
+   z-index: 1000;
++  user-select: none;
++}
++
++.titlebar-drag {
++  -webkit-app-region: drag;
++  flex: 1;
++  display: flex;
++  align-items: center;
++  min-width: 0;
++  padding-right: 12px;
++}
++
++.titlebar-text {
++  font-size: 13px;
++  font-weight: 600;
++  color: #e0e0e0;
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++}
++
++.titlebar-controls {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  -webkit-app-region: no-drag;
++}
++
++.titlebar-select {
++  background: #0f3460;
++  color: #e0e0e0;
++  border: 1px solid #1a4a8a;
++  border-radius: 4px;
++  padding: 4px 8px;
++  font-size: 12px;
++  outline: none;
++  cursor: pointer;
++  max-width: 160px;
++}
++
++.titlebar-select:hover {
++  border-color: #2a6ab0;
++}
++
++.titlebar-select:focus {
++  border-color: #4a90d9;
++}
++
++.titlebar-btns {
++  display: flex;
++  align-items: center;
++  margin-left: 4px;
++}
++
++.titlebar-btn {
++  background: none;
++  border: none;
++  color: #a0a0a0;
++  width: 36px;
++  height: 30px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+-  background: #212121;
+-  transition: opacity 0.6s ease;
++  cursor: pointer;
++  font-size: 14px;
++  font-family: 'Segoe UI', Arial, sans-serif;
++  transition: background 0.15s, color 0.15s;
+ }
+ 
+-#splash-screen.hidden {
+-  display: none;
++.titlebar-btn:hover {
++  background: #2a2a4a;
++  color: #fff;
+ }
+ 
+-#splash-screen.done {
+-  opacity: 0;
+-  pointer-events: none;
++.titlebar-close:hover {
++  background: #e81123;
++  color: #fff;
+ }
+ 
+-.splash-bg {
++/* Content Area */
++.content-area {
+   position: absolute;
+-  top: 0;
++  top: 38px;
+   left: 0;
+-  width: 100%;
+-  height: 100%;
+-  background: linear-gradient(-45deg, #000000, #070707, #0f0f0f, #070707);
+-  background-size: 400% 400%;
+-  animation: gradientShift 15s ease infinite;
++  right: 0;
++  bottom: 0;
+ }
+ 
+-@keyframes gradientShift {
+-  0% { background-position: 0% 50% }
+-  50% { background-position: 100% 50% }
+-  100% { background-position: 0% 50% }
++/* Splash Screen */
++#splash-screen {
++  position: absolute;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  background: #1a1a2e;
++  z-index: 100;
++  transition: opacity 0.4s ease;
+ }
+ 
+-.splash-content {
+-  text-align: center;
+-  opacity: 0;
+-  transform: translateY(20px);
+-  transition: opacity 0.8s ease, transform 0.8s ease;
++#splash-screen.hidden {
++  display: none;
+ }
+ 
+-#splash-screen.active .splash-content {
+-  opacity: 1;
+-  transform: translateY(0);
++#splash-screen.done {
++  opacity: 0;
+ }
+ 
+-.splash-logo {
+-  width: 72px;
+-  height: 72px;
+-  margin-bottom: 24px;
+-  animation: logoPulse 3s ease-in-out infinite;
++.splash-bg {
++  position: absolute;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  background: radial-gradient(ellipse at center, #16213e 0%, #1a1a2e 70%);
+ }
+ 
+-@keyframes logoPulse {
+-  0%, 100% { transform: scale(1); }
+-  50% { transform: scale(1.08); }
++.splash-content {
++  position: relative;
++  text-align: center;
++  z-index: 1;
+ }
+ 
+ .splash-title {
+   font-size: 28px;
+   font-weight: 700;
+-  color: #ececec;
+   margin-bottom: 4px;
+-  letter-spacing: -0.5px;
++  background: linear-gradient(135deg, #4a90d9, #6c5ce7);
++  -webkit-background-clip: text;
++  -webkit-text-fill-color: transparent;
++  background-clip: text;
+ }
+ 
+ .splash-subtitle {
+   font-size: 14px;
+-  color: #6b6b6b;
+-  margin-bottom: 40px;
++  color: #888;
++  margin-bottom: 24px;
+ }
+ 
+ .splash-loader {
+-  width: 200px;
+   margin: 0 auto 12px;
++  width: 200px;
+ }
+ 
+ .splash-loader-track {
+-  width: 100%;
+   height: 3px;
+-  background: #2f2f2f;
++  background: #2a2a4a;
+   border-radius: 2px;
+   overflow: hidden;
+ }
+ 
+ .splash-loader-bar {
+   width: 30%;
+   height: 100%;
+-  background: linear-gradient(90deg, #10a37f, #1a9e7e);
++  background: linear-gradient(90deg, #4a90d9, #6c5ce7);
+   border-radius: 2px;
+-  animation: loaderMove 1.5s ease-in-out infinite;
++  animation: loader 1.5s ease-in-out infinite;
+ }
+ 
+-@keyframes loaderMove {
++@keyframes loader {
+   0% { transform: translateX(-100%); }
+-  100% { transform: translateX(400%); }
+-}
+-
+-#splash-screen.done .splash-loader-bar {
+-  width: 100%;
+-  animation: none;
+-  transition: width 0.3s ease;
++  100% { transform: translateX(350%); }
+ }
+ 
+ .splash-status {
+   font-size: 12px;
+-  color: #6b6b6b;
++  color: #666;
+ }
+ 
++/* Error Screen */
+ #error-screen {
+-  position: fixed;
++  position: absolute;
+   top: 0;
+   left: 0;
+-  width: 100%;
+-  height: 100%;
++  right: 0;
++  bottom: 0;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+-  background: #212121;
++  background: #1a1a2e;
+   z-index: 100;
+ }
+ 
+ #error-screen.hidden {
+   display: none;
+ }
+ 
+ .error-content {
+   text-align: center;
+-  max-width: 440px;
+-  padding: 40px;
++  max-width: 400px;
++  padding: 24px;
+ }
+ 
+ .error-content h1 {
+-  font-size: 24px;
+-  margin-bottom: 16px;
+-  color: #ececec;
++  font-size: 22px;
++  margin-bottom: 8px;
+ }
+ 
+-.error-content p {
+-  font-size: 14px;
+-  color: #b4b4b4;
++#error-message {
++  color: #e74c3c;
+   margin-bottom: 8px;
+-  line-height: 1.5;
++  font-size: 14px;
+ }
+ 
+ .error-hint {
+-  margin-bottom: 24px;
++  color: #888;
++  font-size: 13px;
++  margin-bottom: 20px;
+ }
+ 
+ .error-actions {
+   display: flex;
+-  flex-direction: column;
+-  gap: 10px;
+-  align-items: center;
++  gap: 12px;
++  justify-content: center;
+ }
+ 
+ .btn {
+-  padding: 10px 24px;
++  padding: 8px 20px;
++  border: none;
+   border-radius: 6px;
+-  font-size: 14px;
++  font-size: 13px;
+   cursor: pointer;
+-  border: none;
+-  min-width: 220px;
+-  transition: background 0.2s;
++  transition: background 0.15s;
+ }
+ 
+ .btn-primary {
+-  background: #10a37f;
+-  color: white;
++  background: #4a90d9;
++  color: #fff;
+ }
+ 
+ .btn-primary:hover {
+-  background: #0e8c6b;
++  background: #357abd;
+ }
+ 
+ .btn-secondary {
+-  background: #2f2f2f;
+-  color: #ececec;
+-  border: 1px solid #4a4a4a;
++  background: #2a2a4a;
++  color: #e0e0e0;
+ }
+ 
+ .btn-secondary:hover {
+-  background: #3a3a3a;
++  background: #3a3a5a;
+ }

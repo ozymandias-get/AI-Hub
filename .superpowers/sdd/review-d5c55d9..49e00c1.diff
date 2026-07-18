@@ -1,0 +1,75 @@
+# Review package: d5c55d9..49e00c1
+
+## Commits
+
+49e00c1 chore: rename app to AI Desktop
+
+## Files changed
+
+ electron-builder.yml | 8 ++++----
+ package.json         | 6 +++---
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+## Diff
+
+diff --git a/electron-builder.yml b/electron-builder.yml
+index e90cd5a..19d0165 100644
+--- a/electron-builder.yml
++++ b/electron-builder.yml
+@@ -1,12 +1,12 @@
+-appId: com.local.chatgptdesktop
+-productName: ChatGPT Desktop
++appId: com.local.aidesktop
++productName: AI Desktop
+ copyright: Copyright ┬® 2026
+ 
+ directories:
+   output: release
+   buildResources: assets
+ 
+ files:
+   - dist/**/*
+   - assets/**/*
+ 
+@@ -15,16 +15,16 @@ win:
+   target:
+     - target: nsis
+       arch:
+         - x64
+ 
+ nsis:
+   oneClick: false
+   allowToChangeInstallationDirectory: true
+   createDesktopShortcut: true
+   createStartMenuShortcut: true
+-  shortcutName: ChatGPT Desktop
++  shortcutName: AI Desktop
+   installerIcon: assets/icon.ico
+   uninstallerIcon: assets/icon.ico
+-  artifactName: ChatGPT-Desktop-Setup-${version}.exe
++  artifactName: AI-Desktop-Setup-${version}.exe
+   deleteAppDataOnUninstall: false
+   runAfterFinish: true
+diff --git a/package.json b/package.json
+index dbc0eb6..a5d3440 100644
+--- a/package.json
++++ b/package.json
+@@ -1,15 +1,15 @@
+ {
+-  "name": "chatgpt-desktop",
++  "name": "ai-desktop",
+   "version": "1.0.0",
+-  "description": "ChatGPT Desktop Application",
+-  "author": "ChatGPT Desktop",
++  "description": "AI Desktop Application",
++  "author": "AI Desktop",
+   "license": "MIT",
+   "main": "dist/main/main.js",
+   "scripts": {
+     "build:main": "tsup --config tsup.config.ts",
+     "build:renderer": "vite build --config vite.config.renderer.ts",
+     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+     "build": "npm run clean && concurrently -n main,renderer \"npm run build:main\" \"npm run build:renderer\"",
+     "start": "npm run build && electron .",
+     "dev": "npm run build && electron .",
+     "dist": "npm run build && electron-builder",

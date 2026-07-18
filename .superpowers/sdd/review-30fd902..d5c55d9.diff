@@ -1,0 +1,519 @@
+# Review package: 30fd902..d5c55d9
+
+## Commits
+
+d5c55d9 feat: main process service switching integration
+
+## Files changed
+
+ src/main/main.ts | 143 +++++++++++++++++++++++++++----------------------------
+ src/main/menu.ts |  50 ++++++++++++-------
+ src/main/tray.ts |  15 +++---
+ 3 files changed, 112 insertions(+), 96 deletions(-)
+
+## Diff
+
+diff --git a/src/main/main.ts b/src/main/main.ts
+index d624370..35d6009 100644
+--- a/src/main/main.ts
++++ b/src/main/main.ts
+@@ -1,26 +1,29 @@
+ import { app, BrowserWindow } from 'electron';
+ import * as path from 'path';
+ import { SettingsStore } from './settings-store';
+ import { createMainWindow, getMainWindow, ensureWindowVisible } from './window-manager';
+ import {
+   createServiceView,
+   loadServiceURL,
+   setSettingsStore,
+   restoreZoomLevel,
++  resizeViewToWindow,
++  getCurrentView,
++  getCurrentServiceId,
+ } from './service-view';
+-import { getDefaultService } from './services';
++import { getServiceById, getDefaultService, type AIService } from './services';
+ import { setupMenu } from './menu';
+ import { setupTray, destroyTray } from './tray';
+-import { registerIpcHandlers } from './ipc';
++import { registerIpcHandlers, setIpcSettings } from './ipc';
+ import { setQuitting, getIsQuitting } from './app-state';
+-import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, APP_USER_MODEL_ID } from './constants';
++import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, TITLE_BAR_HEIGHT, APP_USER_MODEL_ID } from './constants';
+ 
+ process.on('unhandledRejection', (reason) => {
+   console.warn('[App] Unhandled rejection:', reason);
+ });
+ 
+ if (process.platform === 'win32') {
+   app.setAppUserModelId(APP_USER_MODEL_ID);
+ }
+ 
+ const settings = new SettingsStore();
+@@ -39,20 +42,21 @@ if (!gotSingleInstanceLock) {
+     const win = getMainWindow();
+     if (win) {
+       if (win.isMinimized()) win.restore();
+       win.show();
+       win.focus();
+     }
+   });
+ 
+   app.whenReady().then(() => {
+     registerIpcHandlers();
++    setIpcSettings(settings);
+     bootstrapWindow();
+   });
+ 
+   app.on('window-all-closed', () => {
+     if (process.platform !== 'darwin') {
+       destroyTray();
+       app.quit();
+     }
+   });
+ 
+@@ -82,157 +86,148 @@ function bootstrapWindow(): void {
+   viewAdded = false;
+   activeView = null;
+ 
+   const win = createMainWindow(settings);
+   ensureWindowVisible();
+ 
+   win.loadFile(path.join(__dirname, '../renderer/index.html')).catch((err) => {
+     console.warn('[App] Failed to load renderer HTML:', err);
+   });
+ 
++  const lastServiceId = settings.getWindow().lastService;
++  const service = getServiceById(lastServiceId) ?? getDefaultService();
++
+   let view: Electron.WebContentsView;
+   try {
+-    view = createServiceView(getDefaultService());
++    view = createServiceView(service);
+   } catch (err) {
+     console.warn('[App] Failed to create service view:', err);
+-    win.webContents
+-      .executeJavaScript(
+-        `document.getElementById('error-message').textContent = 'Uygulama baslatilamadi: ${escapeForSingleQuotedJs(String(err))}'; document.getElementById('error-screen')?.classList.remove('hidden');`
+-      )
+-      .catch(() => {});
++    win.webContents.executeJavaScript(
++      `document.getElementById('error-message').textContent = 'Uygulama baslatilamadi: ${escapeForSingleQuotedJs(String(err))}'; document.getElementById('error-screen')?.classList.remove('hidden');`
++    ).catch(() => {});
+     return;
+   }
+   activeView = view;
+ 
+-  setupViewEvents(win, view);
+-  loadServiceURL(getDefaultService());
++  setupViewEvents(win, view, service);
++  loadServiceURL(service);
+   setupMenu(win, settings);
+   restoreZoomLevel();
+-
+   setupTray();
+ 
+   win.on('close', (event) => {
+     if (resizeTimer) {
+       clearTimeout(resizeTimer);
+       resizeTimer = null;
+     }
++    saveWindowState(win);
+     if (!getIsQuitting()) {
+       event.preventDefault();
+       win.hide();
+     }
+   });
++
++  win.on('resize', () => {
++    if (viewAdded && activeView === view && !win.isDestroyed()) {
++      if (resizeTimer) clearTimeout(resizeTimer);
++      resizeTimer = setTimeout(() => {
++        resizeViewToWindow(win);
++        resizeTimer = null;
++      }, RESIZE_DEBOUNCE_MS);
++    }
++  });
++
++  win.on('maximize', () => updateMaximizeButton(win));
++  win.on('unmaximize', () => updateMaximizeButton(win));
++}
++
++function saveWindowState(win: BrowserWindow): void {
++  const maximized = win.isMaximized();
++  if (!maximized) {
++    const bounds = win.getBounds();
++    settings.setWindow({
++      width: bounds.width,
++      height: bounds.height,
++      x: bounds.x,
++      y: bounds.y,
++    });
++  }
++  settings.setWindow({ isMaximized: maximized });
++  settings.saveSync();
++}
++
++function updateMaximizeButton(win: BrowserWindow): void {
++  if (win.isDestroyed()) return;
++  win.webContents.executeJavaScript(
++    `document.getElementById('maximize-btn')?.classList.toggle('is-maximized', ${win.isMaximized()});`
++  ).catch(() => {});
+ }
+ 
+ function escapeForSingleQuotedJs(value: string): string {
+   return value
+     .replace(/\\/g, '\\\\')
+     .replace(/'/g, "\\'")
+     .replace(/\r/g, '\\r')
+     .replace(/\n/g, '\\n')
+     .replace(/</g, '\\u003c')
+     .replace(/>/g, '\\u003e')
+     .replace(/\$\{/g, '\\${')
+     .replace(/`/g, '\\`');
+ }
+ 
+-function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView): void {
++function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView, service: AIService): void {
+   view.webContents.on('did-start-loading', () => {
+     if (win.isDestroyed()) return;
+     win.setProgressBar(-1, { mode: 'indeterminate' });
+-    win.webContents
+-      .executeJavaScript(
+-        `
+-      (() => {
+-        if (window.__splashTimer) {
+-          clearTimeout(window.__splashTimer);
+-          window.__splashTimer = null;
+-        }
++    win.webContents.executeJavaScript(
++      `(() => {
++        if (window.__splashTimer) { clearTimeout(window.__splashTimer); window.__splashTimer = null; }
+         document.getElementById('error-screen')?.classList.add('hidden');
+         document.getElementById('splash-screen')?.classList.remove('done', 'hidden');
+         document.getElementById('splash-screen')?.classList.add('active');
+-      })();
+-    `
+-      )
+-      .catch((err) => console.warn('Failed to show splash:', err));
++      })();`
++    ).catch((err) => console.warn('Failed to show splash:', err));
+   });
+ 
+   view.webContents.on('did-stop-loading', () => {
+     if (win.isDestroyed()) return;
+     win.setProgressBar(-1, { mode: 'none' });
+     if (!viewAdded && activeView === view) {
+       win.contentView.addChildView(view);
+-      resizeView(win, view);
++      resizeViewToWindow(win);
+       viewAdded = true;
+       view.webContents.focus();
+     }
+-    win.webContents
+-      .executeJavaScript(
+-        `
+-      (() => {
++    win.webContents.executeJavaScript(
++      `(() => {
+         const splash = document.getElementById('splash-screen');
+         if (splash) splash.classList.add('done');
+         if (window.__splashTimer) clearTimeout(window.__splashTimer);
+         window.__splashTimer = setTimeout(() => {
+           if (splash) splash.classList.add('hidden');
+           window.__splashTimer = null;
+         }, ${LOADING_BAR_TIMEOUT_MS + 300});
+-      })();
+-    `
+-      )
+-      .catch((err) => console.warn('Failed to hide splash:', err));
++      })();`
++    ).catch((err) => console.warn('Failed to hide splash:', err));
+   });
+ 
+   view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+     if (win.isDestroyed()) return;
+-    // Ignore aborted loads and subframe failures
+-    if (!isMainFrame || errorCode === -3) {
+-      return;
+-    }
++    if (!isMainFrame || errorCode === -3) return;
+ 
+     win.setProgressBar(-1, { mode: 'none' });
+     if (viewAdded && activeView === view) {
+-      try {
+-        win.contentView.removeChildView(view);
+-      } catch {
+-        // View may already be detached
+-      }
++      try { win.contentView.removeChildView(view); } catch {}
+       viewAdded = false;
+     }
+ 
+     const escaped = escapeForSingleQuotedJs(errorDescription || 'Bilinmeyen hata');
+-    win.webContents
+-      .executeJavaScript(
+-        `
+-      (() => {
++    win.webContents.executeJavaScript(
++      `(() => {
+         document.getElementById('splash-screen')?.classList.add('hidden');
+         const msg = document.getElementById('error-message');
+         if (msg) msg.textContent = '${escaped}';
+         document.getElementById('error-screen')?.classList.remove('hidden');
+-      })();
+-    `
+-      )
+-      .catch((err) => console.warn('Failed to show error screen:', err));
+-  });
+-
+-  win.on('resize', () => {
+-    if (viewAdded && activeView === view && !win.isDestroyed()) {
+-      if (resizeTimer) clearTimeout(resizeTimer);
+-      resizeTimer = setTimeout(() => {
+-        resizeView(win, view);
+-        resizeTimer = null;
+-      }, RESIZE_DEBOUNCE_MS);
+-    }
+-  });
+-}
+-
+-function resizeView(win: BrowserWindow, view: Electron.WebContentsView): void {
+-  if (win.isDestroyed() || view.webContents.isDestroyed()) {
+-    return;
+-  }
+-  const contentBounds = win.getContentBounds();
+-  view.setBounds({
+-    x: 0,
+-    y: 0,
+-    width: contentBounds.width,
+-    height: contentBounds.height,
++      })();`
++    ).catch((err) => console.warn('Failed to show error screen:', err));
+   });
+ }
+diff --git a/src/main/menu.ts b/src/main/menu.ts
+index c6e184a..8608b77 100644
+--- a/src/main/menu.ts
++++ b/src/main/menu.ts
+@@ -1,39 +1,55 @@
+ import { app, BrowserWindow, Menu, MenuItemConstructorOptions, shell, dialog } from 'electron';
+ import {
+-  loadServiceURL,
+   reloadService,
+   goBack,
+   goForward,
+   zoomIn,
+   zoomOut,
+   zoomReset,
+   getCurrentServiceId,
++  switchToService,
+ } from './service-view';
+-import { getServiceById, getDefaultService } from './services';
++import { SERVICE_CATEGORIES, getServiceById } from './services';
+ import type { SettingsStore } from './settings-store';
+ import { setQuitting } from './app-state';
+ 
+ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+   const isDev = !app.isPackaged;
+ 
++  const servislerSubmenu: MenuItemConstructorOptions[] = [];
++  for (const cat of SERVICE_CATEGORIES) {
++    servislerSubmenu.push({
++      label: `ÔöÇÔöÇ ${cat.name} ÔöÇÔöÇ`,
++      enabled: false,
++    });
++    for (const svc of cat.services) {
++      servislerSubmenu.push({
++        label: svc.name,
++        click: () => switchToService(svc.id, win, settings),
++      });
++    }
++    servislerSubmenu.push({ type: 'separator' });
++  }
++
+   const template: MenuItemConstructorOptions[] = [
+     {
+       label: 'Uygulama',
+       submenu: [
+         {
+-          label: 'Ana Sayfa',
++          label: 'Servis De─şi┼ştir',
+           accelerator: 'CmdOrCtrl+L',
+           click: () => {
+-            const id = getCurrentServiceId();
+-            const svc = getServiceById(id ?? '') ?? getDefaultService();
+-            loadServiceURL(svc);
++            win.webContents.focus();
++            win.webContents.executeJavaScript(
++              "document.getElementById('category-select')?.focus();"
++            ).catch(() => {});
+           },
+         },
+         { type: 'separator' },
+         {
+           label: 'Yenile',
+           accelerator: 'CmdOrCtrl+R',
+           click: () => reloadService(false),
+         },
+         {
+           label: '├ûnbelle─şi Yok Sayarak Yenile',
+@@ -53,20 +69,24 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+         {
+           label: '├ç─▒k─▒┼ş',
+           accelerator: 'CmdOrCtrl+Q',
+           click: () => {
+             setQuitting(true);
+             app.quit();
+           },
+         },
+       ],
+     },
++    {
++      label: 'Servisler',
++      submenu: servislerSubmenu,
++    },
+     {
+       label: 'G├Âr├╝n├╝m',
+       submenu: [
+         {
+           label: 'Yak─▒nla┼şt─▒r',
+           accelerator: 'CmdOrCtrl+=',
+           click: () => zoomIn(),
+         },
+         {
+           label: 'Uzakla┼şt─▒r',
+@@ -75,23 +95,21 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+         },
+         {
+           label: 'Yak─▒nla┼şt─▒rmay─▒ S─▒f─▒rla',
+           accelerator: 'CmdOrCtrl+0',
+           click: () => zoomReset(),
+         },
+         { type: 'separator' },
+         {
+           label: 'Tam Ekran',
+           accelerator: 'F11',
+-          click: () => {
+-            win.setFullScreen(!win.isFullScreen());
+-          },
++          click: () => { win.setFullScreen(!win.isFullScreen()); },
+         },
+       ],
+     },
+     {
+       label: 'Gezinme',
+       submenu: [
+         {
+           label: 'Geri',
+           accelerator: 'Alt+Left',
+           click: () => goBack(),
+@@ -103,47 +121,47 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
+         },
+       ],
+     },
+     {
+       label: 'Yard─▒m',
+       submenu: [
+         {
+           label: 'Servisi Taray─▒c─▒da A├ğ',
+           click: () => {
+             const id = getCurrentServiceId();
+-            const svc = getServiceById(id ?? '') ?? getDefaultService();
+-            shell.openExternal(svc.url).catch((err) => console.warn('Failed to open browser:', err));
++            if (id) {
++              const svc = getServiceById(id);
++              if (svc) shell.openExternal(svc.url).catch((err) => console.warn('Failed to open browser:', err));
++            }
+           },
+         },
+         { type: 'separator' },
+         {
+           label: 'Uygulama S├╝r├╝m├╝',
+           click: () => {
+             dialog.showMessageBox(win, {
+               type: 'info',
+-              title: 'ChatGPT Desktop',
+-              message: `ChatGPT Desktop v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
++              title: 'AI Desktop',
++              message: `AI Desktop v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
+             }).catch((err) => console.warn('Failed to show version dialog:', err));
+           },
+         },
+       ],
+     },
+   ];
+ 
+   if (isDev) {
+     template.push({
+       label: 'Geli┼ştirme',
+       submenu: [
+         {
+           label: 'Geli┼ştirici Ara├ğlar─▒',
+           accelerator: 'CmdOrCtrl+Shift+I',
+-          click: () => {
+-            win.webContents.toggleDevTools();
+-          },
++          click: () => { win.webContents.toggleDevTools(); },
+         },
+       ],
+     });
+   }
+ 
+   const menu = Menu.buildFromTemplate(template);
+   Menu.setApplicationMenu(menu);
+ }
+diff --git a/src/main/tray.ts b/src/main/tray.ts
+index c3df988..8599afa 100644
+--- a/src/main/tray.ts
++++ b/src/main/tray.ts
+@@ -1,14 +1,12 @@
+ import { app, Menu, Tray, nativeImage } from 'electron';
+ import { getMainWindow } from './window-manager';
+-import { loadServiceURL, getCurrentServiceId } from './service-view';
+-import { getServiceById, getDefaultService } from './services';
+ import { setQuitting } from './app-state';
+ import * as path from 'path';
+ 
+ let tray: Tray | null = null;
+ 
+ export function setupTray(): void {
+   if (tray) return;
+ 
+   let icon: Electron.NativeImage;
+   const iconPath = path.join(__dirname, '../../assets/icon.ico');
+@@ -30,25 +28,30 @@ export function setupTray(): void {
+       label: 'Uygulamay─▒ G├Âster',
+       click: () => {
+         const win = getMainWindow();
+         if (win) {
+           win.show();
+           win.focus();
+         }
+       },
+     },
+     {
+-      label: 'Ana Sayfaya Git',
++      label: 'Servis De─şi┼ştir',
+       click: () => {
+-        const id = getCurrentServiceId();
+-        const svc = getServiceById(id ?? '') ?? getDefaultService();
+-        loadServiceURL(svc);
++        const win = getMainWindow();
++        if (win) {
++          win.show();
++          win.focus();
++          win.webContents.executeJavaScript(
++            "document.getElementById('category-select')?.focus();"
++          ).catch(() => {});
++        }
+       },
+     },
+     { type: 'separator' },
+     {
+       label: '├ç─▒k─▒┼ş',
+       click: () => {
+         setQuitting(true);
+         app.quit();
+       },
+     },

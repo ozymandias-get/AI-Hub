@@ -1,3 +1,17 @@
+### Task 2: Generalize View to Any Service
+
+**Files:**
+- Modify: `src/main/chatgpt-view.ts` (rename and refactor)
+
+**Interfaces:**
+- Consumes: `AIService` from services.ts
+- Produces: `createServiceView(service: AIService): WebContentsView`, `loadServiceURL(view, service)`, `destroyCurrentView()`
+
+- [ ] **Step 1: Rename and refactor `src/main/chatgpt-view.ts` to `src/main/service-view.ts`**
+
+Replace entire file content:
+
+```typescript
 import { BrowserWindow, WebContentsView } from 'electron';
 import { setupNavigationPolicy } from './navigation-policy';
 import { setupPermissions } from './permissions';
@@ -152,56 +166,6 @@ export function switchToService(serviceId: string, win: BrowserWindow, settings:
   settings.save();
 
   createServiceView(service);
-
-  const view = currentView!;
-  let viewAttached = false;
-
-  view.webContents.on('did-start-loading', () => {
-    if (win.isDestroyed()) return;
-    win.setProgressBar(-1, { mode: 'indeterminate' });
-  });
-
-  view.webContents.on('did-stop-loading', () => {
-    if (win.isDestroyed()) return;
-    win.setProgressBar(-1, { mode: 'none' });
-    if (!viewAttached) {
-      win.contentView.addChildView(view);
-      resizeViewToWindow(win);
-      viewAttached = true;
-      view.webContents.focus();
-    }
-    win.webContents.executeJavaScript(
-      `(() => {
-        const splash = document.getElementById('splash-screen');
-        if (splash) splash.classList.add('done');
-        if (window.__splashTimer) clearTimeout(window.__splashTimer);
-        window.__splashTimer = setTimeout(() => {
-          if (splash) splash.classList.add('hidden');
-          window.__splashTimer = null;
-        }, 600);
-      })();`
-    ).catch(() => {});
-  });
-
-  view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
-    if (win.isDestroyed()) return;
-    if (!isMainFrame || errorCode === -3) return;
-    win.setProgressBar(-1, { mode: 'none' });
-    if (viewAttached) {
-      try { win.contentView.removeChildView(view); } catch {}
-      viewAttached = false;
-    }
-    const desc = (errorDescription || 'Bilinmeyen hata').replace(/'/g, "\\'");
-    win.webContents.executeJavaScript(
-      `(() => {
-        document.getElementById('splash-screen')?.classList.add('hidden');
-        const msg = document.getElementById('error-message');
-        if (msg) msg.textContent = '${desc}';
-        document.getElementById('error-screen')?.classList.remove('hidden');
-      })();`
-    ).catch(() => {});
-  });
-
   loadServiceURL(service);
 
   win.setTitle(`AI Desktop - ${service.name}`);
@@ -215,3 +179,31 @@ export function switchToService(serviceId: string, win: BrowserWindow, settings:
     })();`
   ).catch(() => {});
 }
+```
+
+- [ ] **Step 2: Update all imports across the project that reference `./chatgpt-view`**
+
+Files to update: `main.ts`, `menu.ts`, `ipc.ts`
+
+Change `from './chatgpt-view'` to `from './service-view'` and update function names:
+- `getChatGPTView()` → `getCurrentView()`
+- `createChatGPTView()` → `createServiceView(service)`
+- `loadChatGPTURL()` → `loadServiceURL(service)`
+- `reloadChatGPT()` → `reloadService()`
+
+- [ ] **Step 3: Delete old `src/main/chatgpt-view.ts`**
+
+- [ ] **Step 4: Run typecheck to verify**
+
+Run: `npm run typecheck`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/main/service-view.ts src/main/chatgpt-view.ts src/main/main.ts src/main/menu.ts src/main/ipc.ts
+git commit -m "refactor: generalize chatgpt-view to service-view"
+```
+
+---
+

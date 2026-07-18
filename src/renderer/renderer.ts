@@ -31,9 +31,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   const maximizeBtn = document.getElementById('maximize-btn')!;
   const closeBtn = document.getElementById('close-btn')!;
 
+  const titlebar = document.getElementById('titlebar')!;
+
   minimizeBtn.addEventListener('click', () => window.aiDesktop.minimize());
   maximizeBtn.addEventListener('click', () => window.aiDesktop.maximize());
   closeBtn.addEventListener('click', () => window.aiDesktop.close());
+  titlebar.addEventListener('dblclick', () => window.aiDesktop.maximize());
 
   categories = await window.aiDesktop.getServices();
   populateCategories();

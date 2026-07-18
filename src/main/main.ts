@@ -16,7 +16,7 @@ import { setupMenu } from './menu';
 import { setupTray, destroyTray } from './tray';
 import { registerIpcHandlers, setIpcSettings } from './ipc';
 import { setQuitting, getIsQuitting } from './app-state';
-import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, TITLE_BAR_HEIGHT, APP_USER_MODEL_ID } from './constants';
+import { RESIZE_DEBOUNCE_MS, LOADING_BAR_TIMEOUT_MS, APP_USER_MODEL_ID } from './constants';
 
 process.on('unhandledRejection', (reason) => {
   console.warn('[App] Unhandled rejection:', reason);
@@ -31,7 +31,6 @@ setSettingsStore(settings);
 
 let viewAdded = false;
 let resizeTimer: NodeJS.Timeout | null = null;
-let activeView: Electron.WebContentsView | null = null;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -84,7 +83,6 @@ function bootstrapWindow(): void {
     resizeTimer = null;
   }
   viewAdded = false;
-  activeView = null;
 
   const win = createMainWindow(settings);
   ensureWindowVisible();
@@ -106,8 +104,6 @@ function bootstrapWindow(): void {
     ).catch(() => {});
     return;
   }
-  activeView = view;
-
   setupViewEvents(win, view, service);
   loadServiceURL(service);
   setupMenu(win, settings);
@@ -127,7 +123,7 @@ function bootstrapWindow(): void {
   });
 
   win.on('resize', () => {
-    if (viewAdded && activeView === view && !win.isDestroyed()) {
+    if (viewAdded && !win.isDestroyed()) {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         resizeViewToWindow(win);
@@ -191,7 +187,7 @@ function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView, ser
   view.webContents.on('did-stop-loading', () => {
     if (win.isDestroyed()) return;
     win.setProgressBar(-1, { mode: 'none' });
-    if (!viewAdded && activeView === view) {
+    if (!viewAdded) {
       win.contentView.addChildView(view);
       resizeViewToWindow(win);
       viewAdded = true;
@@ -215,7 +211,7 @@ function setupViewEvents(win: BrowserWindow, view: Electron.WebContentsView, ser
     if (!isMainFrame || errorCode === -3) return;
 
     win.setProgressBar(-1, { mode: 'none' });
-    if (viewAdded && activeView === view) {
+    if (viewAdded) {
       try { win.contentView.removeChildView(view); } catch {}
       viewAdded = false;
     }

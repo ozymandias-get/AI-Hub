@@ -1,0 +1,577 @@
+# Review package: 9b8829c..30fd902
+
+## Commits
+
+30fd902 feat: custom title bar with service dropdown
+
+## Files changed
+
+ src/renderer/index.html  |  61 +++++++-----
+ src/renderer/renderer.ts |  93 ++++++++++++++++--
+ src/renderer/styles.css  | 246 ++++++++++++++++++++++++++++++-----------------
+ 3 files changed, 282 insertions(+), 118 deletions(-)
+
+## Diff
+
+diff --git a/src/renderer/index.html b/src/renderer/index.html
+index b78bd55..38a7bd0 100644
+--- a/src/renderer/index.html
++++ b/src/renderer/index.html
+@@ -1,42 +1,59 @@
+ <!DOCTYPE html>
+ <html lang="tr">
+ <head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+-  <title>ChatGPT Desktop</title>
++  <title>AI Desktop</title>
+   <link rel="stylesheet" href="./styles.css">
+ </head>
+ <body>
+-  <div id="splash-screen" class="active">
+-    <div class="splash-bg"></div>
+-    <div class="splash-content">
+-      <svg class="splash-logo" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
+-        <path d="m297.06 130.97c7.26-21.79 4.76-45.66-6.85-65.48-17.46-30.4-52.56-46.04-86.84-38.68-15.25-17.18-37.16-26.95-60.13-26.81-35.04-.08-66.13 22.48-76.91 55.82-22.51 4.61-41.94 18.7-53.31 38.67-17.59 30.32-13.58 68.54 9.92 94.54-7.26 21.79-4.76 45.66 6.85 65.48 17.46 30.4 52.56 46.04 86.84 38.68 15.24 17.18 37.16 26.95 60.13 26.8 35.06.09 66.16-22.49 76.94-55.86 22.51-4.61 41.94-18.7 53.31-38.67 17.57-30.32 13.55-68.51-9.94-94.51zm-120.28 168.11c-14.03.02-27.62-4.89-38.39-13.88.49-.26 1.34-.73 1.89-1.07l63.72-36.8c3.26-1.85 5.26-5.32 5.24-9.07v-89.83l26.93 15.55c.29.14.48.42.52.74v74.39c-.04 33.08-26.83 59.9-59.91 59.97zm-128.84-55.03c-7.03-12.14-9.56-26.37-7.15-40.18.47.28 1.3.79 1.89 1.13l63.72 36.8c3.23 1.89 7.23 1.89 10.47 0l77.79-44.92v31.1c.02.32-.13.63-.38.83l-64.41 37.19c-28.69 16.52-65.33 6.7-81.92-21.95zm-16.77-139.09c7-12.16 18.05-21.46 31.21-26.29 0 .55-.03 1.52-.03 2.2v73.61c-.02 3.74 1.98 7.21 5.23 9.06l77.79 44.91-26.93 15.55c-.27.18-.61.21-.91.08l-64.42-37.22c-28.63-16.58-38.45-53.21-21.95-81.89zm221.26 51.49-77.79-44.92 26.93-15.54c.27-.18.61-.21.91-.08l64.42 37.19c28.68 16.57 38.51 53.26 21.94 81.94-7.01 12.14-18.05 21.44-31.2 26.28v-75.81c.03-3.74-1.96-7.2-5.2-9.06zm26.8-40.34c-.47-.29-1.3-.79-1.89-1.13l-63.72-36.8c-3.23-1.89-7.23-1.89-10.47 0l-77.79 44.92v-31.1c-.02-.32.13-.63.38-.83l64.41-37.16c28.69-16.55 65.37-6.7 81.91 22 6.99 12.12 9.52 26.31 7.15 40.1zm-168.51 55.43-26.94-15.55c-.29-.14-.48-.42-.52-.74v-74.39c.02-33.12 26.89-59.96 60.01-59.94 14.01 0 27.57 4.92 38.34 13.88-.49.26-1.33.73-1.89 1.07l-63.72 36.8c-3.26 1.85-5.26 5.31-5.24 9.06l-.04 89.79zm14.63-31.54 34.65-20.01 34.65 20v40.01l-34.65 20-34.65-20z" fill="#ffffff"/>
+-      </svg>
+-      <h1 class="splash-title">ChatGPT</h1>
+-      <p class="splash-subtitle">Masa├╝st├╝ Uygulamas─▒</p>
+-      <div class="splash-loader">
+-        <div class="splash-loader-track">
+-          <div class="splash-loader-bar"></div>
+-        </div>
++  <div id="titlebar" class="titlebar">
++    <div class="titlebar-drag">
++      <span class="titlebar-text">AI Desktop</span>
++    </div>
++    <div class="titlebar-controls">
++      <select id="category-select" class="titlebar-select" aria-label="Kategori">
++        <option value="">Kategori Se├ğ</option>
++      </select>
++      <select id="service-select" class="titlebar-select" aria-label="Servis">
++        <option value="">Servis Se├ğ</option>
++      </select>
++      <div class="titlebar-btns">
++        <button id="minimize-btn" class="titlebar-btn" title="K├╝├ğ├╝lt">ÔöÇ</button>
++        <button id="maximize-btn" class="titlebar-btn" title="B├╝y├╝t">Ôûí</button>
++        <button id="close-btn" class="titlebar-btn titlebar-close" title="Kapat">Ô£ò</button>
+       </div>
+-      <p class="splash-status">Ba─şlan─▒yor...</p>
+     </div>
+   </div>
+ 
+-  <div id="error-screen" class="hidden">
+-    <div class="error-content">
+-      <h1>Ba─şlant─▒ Hatas─▒</h1>
+-      <p id="error-message">ChatGPT y├╝klenirken bir hata olu┼ştu.</p>
+-      <p class="error-hint">─░nternet ba─şlant─▒n─▒z─▒ kontrol edin ve tekrar deneyin.</p>
+-      <div class="error-actions">
+-        <button id="retry-button" class="btn btn-primary">Yeniden Dene</button>
+-        <button id="open-browser-button" class="btn btn-secondary">ChatGPT'yi Taray─▒c─▒da A├ğ</button>
++  <div id="content-area" class="content-area">
++    <div id="splash-screen" class="active">
++      <div class="splash-bg"></div>
++      <div class="splash-content">
++        <h1 class="splash-title">AI Desktop</h1>
++        <p class="splash-subtitle" id="splash-subtitle">Y├╝kleniyor...</p>
++        <div class="splash-loader">
++          <div class="splash-loader-track">
++            <div class="splash-loader-bar"></div>
++          </div>
++        </div>
++        <p class="splash-status" id="splash-status">Ba─şlan─▒yor...</p>
++      </div>
++    </div>
++
++    <div id="error-screen" class="hidden">
++      <div class="error-content">
++        <h1>Ba─şlant─▒ Hatas─▒</h1>
++        <p id="error-message">Servis y├╝klenirken bir hata olu┼ştu.</p>
++        <p class="error-hint">─░nternet ba─şlant─▒n─▒z─▒ kontrol edin veya farkl─▒ bir servis se├ğin.</p>
++        <div class="error-actions">
++          <button id="retry-button" class="btn btn-primary">Yeniden Dene</button>
++        </div>
+       </div>
+     </div>
+   </div>
+ 
+   <script type="module" src="./renderer.js"></script>
+ </body>
+ </html>
+diff --git a/src/renderer/renderer.ts b/src/renderer/renderer.ts
+index e1de7ed..38da1be 100644
+--- a/src/renderer/renderer.ts
++++ b/src/renderer/renderer.ts
+@@ -1,19 +1,98 @@
++const titlebarText = document.getElementById('titlebar-text')!;
++const categorySelect = document.getElementById('category-select') as HTMLSelectElement;
++const serviceSelect = document.getElementById('service-select') as HTMLSelectElement;
+ const splashScreen = document.getElementById('splash-screen')!;
++const splashSubtitle = document.getElementById('splash-subtitle')!;
++const splashStatus = document.getElementById('splash-status')!;
+ const errorScreen = document.getElementById('error-screen')!;
++const errorMessage = document.getElementById('error-message')!;
+ const retryButton = document.getElementById('retry-button')!;
+-const openBrowserButton = document.getElementById('open-browser-button')!;
+ 
+-window.addEventListener('DOMContentLoaded', () => {
++interface AIService {
++  id: string;
++  name: string;
++  url: string;
++  category: string;
++}
++
++interface AIServiceCategory {
++  name: string;
++  key: string;
++  services: AIService[];
++}
++
++let categories: AIServiceCategory[] = [];
++let currentServiceId: string | null = null;
++
++window.addEventListener('DOMContentLoaded', async () => {
+   splashScreen.classList.add('active');
++
++  const minimizeBtn = document.getElementById('minimize-btn')!;
++  const maximizeBtn = document.getElementById('maximize-btn')!;
++  const closeBtn = document.getElementById('close-btn')!;
++
++  minimizeBtn.addEventListener('click', () => window.aiDesktop.minimize());
++  maximizeBtn.addEventListener('click', () => window.aiDesktop.maximize());
++  closeBtn.addEventListener('click', () => window.aiDesktop.close());
++
++  categories = await window.aiDesktop.getServices();
++  populateCategories();
+ });
+ 
+-retryButton.addEventListener('click', () => {
++function populateCategories(): void {
++  categorySelect.innerHTML = '<option value="">Kategori Se├ğ</option>';
++  for (const cat of categories) {
++    const option = document.createElement('option');
++    option.value = cat.key;
++    option.textContent = cat.name;
++    categorySelect.appendChild(option);
++  }
++
++  categorySelect.addEventListener('change', () => {
++    const key = categorySelect.value;
++    populateServices(key);
++  });
++
++  serviceSelect.addEventListener('change', () => {
++    const id = serviceSelect.value;
++    if (id) {
++      switchToService(id);
++    }
++  });
++}
++
++function populateServices(categoryKey: string): void {
++  serviceSelect.innerHTML = '<option value="">Servis Se├ğ</option>';
++  const cat = categories.find(c => c.key === categoryKey);
++  if (!cat) return;
++
++  for (const svc of cat.services) {
++    const option = document.createElement('option');
++    option.value = svc.id;
++    option.textContent = svc.name;
++    serviceSelect.appendChild(option);
++  }
++}
++
++function switchToService(serviceId: string): void {
++  currentServiceId = serviceId;
+   errorScreen.classList.add('hidden');
+   splashScreen.classList.remove('done', 'hidden');
+   splashScreen.classList.add('active');
+-  window.chatgptDesktop.retryLoad();
+-});
++  splashStatus.textContent = 'Ba─şlan─▒yor...';
++
++  const svc = categories.flatMap(c => c.services).find(s => s.id === serviceId);
++  if (svc) {
++    splashSubtitle.textContent = svc.name;
++    titlebarText.textContent = `AI Desktop - ${svc.name}`;
++    document.title = `AI Desktop - ${svc.name}`;
++  }
+ 
+-openBrowserButton.addEventListener('click', () => {
+-  window.chatgptDesktop.openExternal(window.chatgptDesktop.chatgptUrl);
++  window.aiDesktop.selectService(serviceId);
++}
++
++retryButton.addEventListener('click', () => {
++  if (currentServiceId) {
++    switchToService(currentServiceId);
++  }
+ });
+diff --git a/src/renderer/styles.css b/src/renderer/styles.css
+index e5dd2a3..33584bf 100644
+--- a/src/renderer/styles.css
++++ b/src/renderer/styles.css
+@@ -1,204 +1,272 @@
+ * {
+   margin: 0;
+   padding: 0;
+   box-sizing: border-box;
+ }
+ 
+-body {
+-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+-  background: #212121;
+-  color: #ececec;
++html, body {
++  width: 100%;
++  height: 100%;
+   overflow: hidden;
+-  height: 100vh;
++  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
++  background: #1a1a2e;
++  color: #fff;
+ }
+ 
+-#splash-screen {
++/* Title Bar */
++.titlebar {
+   position: fixed;
+   top: 0;
+   left: 0;
+-  width: 100%;
+-  height: 100%;
++  right: 0;
++  height: 38px;
++  background: #16213e;
++  display: flex;
++  align-items: center;
++  padding: 0 8px;
+   z-index: 1000;
++  user-select: none;
++}
++
++.titlebar-drag {
++  -webkit-app-region: drag;
++  flex: 1;
++  display: flex;
++  align-items: center;
++  min-width: 0;
++  padding-right: 12px;
++}
++
++.titlebar-text {
++  font-size: 13px;
++  font-weight: 600;
++  color: #e0e0e0;
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++}
++
++.titlebar-controls {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  -webkit-app-region: no-drag;
++}
++
++.titlebar-select {
++  background: #0f3460;
++  color: #e0e0e0;
++  border: 1px solid #1a4a8a;
++  border-radius: 4px;
++  padding: 4px 8px;
++  font-size: 12px;
++  outline: none;
++  cursor: pointer;
++  max-width: 160px;
++}
++
++.titlebar-select:hover {
++  border-color: #2a6ab0;
++}
++
++.titlebar-select:focus {
++  border-color: #4a90d9;
++}
++
++.titlebar-btns {
++  display: flex;
++  align-items: center;
++  margin-left: 4px;
++}
++
++.titlebar-btn {
++  background: none;
++  border: none;
++  color: #a0a0a0;
++  width: 36px;
++  height: 30px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+-  background: #212121;
+-  transition: opacity 0.6s ease;
++  cursor: pointer;
++  font-size: 14px;
++  font-family: 'Segoe UI', Arial, sans-serif;
++  transition: background 0.15s, color 0.15s;
+ }
+ 
+-#splash-screen.hidden {
+-  display: none;
++.titlebar-btn:hover {
++  background: #2a2a4a;
++  color: #fff;
+ }
+ 
+-#splash-screen.done {
+-  opacity: 0;
+-  pointer-events: none;
++.titlebar-close:hover {
++  background: #e81123;
++  color: #fff;
+ }
+ 
+-.splash-bg {
++/* Content Area */
++.content-area {
+   position: absolute;
+-  top: 0;
++  top: 38px;
+   left: 0;
+-  width: 100%;
+-  height: 100%;
+-  background: linear-gradient(-45deg, #000000, #070707, #0f0f0f, #070707);
+-  background-size: 400% 400%;
+-  animation: gradientShift 15s ease infinite;
++  right: 0;
++  bottom: 0;
+ }
+ 
+-@keyframes gradientShift {
+-  0% { background-position: 0% 50% }
+-  50% { background-position: 100% 50% }
+-  100% { background-position: 0% 50% }
++/* Splash Screen */
++#splash-screen {
++  position: absolute;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  background: #1a1a2e;
++  z-index: 100;
++  transition: opacity 0.4s ease;
+ }
+ 
+-.splash-content {
+-  text-align: center;
+-  opacity: 0;
+-  transform: translateY(20px);
+-  transition: opacity 0.8s ease, transform 0.8s ease;
++#splash-screen.hidden {
++  display: none;
+ }
+ 
+-#splash-screen.active .splash-content {
+-  opacity: 1;
+-  transform: translateY(0);
++#splash-screen.done {
++  opacity: 0;
+ }
+ 
+-.splash-logo {
+-  width: 72px;
+-  height: 72px;
+-  margin-bottom: 24px;
+-  animation: logoPulse 3s ease-in-out infinite;
++.splash-bg {
++  position: absolute;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  background: radial-gradient(ellipse at center, #16213e 0%, #1a1a2e 70%);
+ }
+ 
+-@keyframes logoPulse {
+-  0%, 100% { transform: scale(1); }
+-  50% { transform: scale(1.08); }
++.splash-content {
++  position: relative;
++  text-align: center;
++  z-index: 1;
+ }
+ 
+ .splash-title {
+   font-size: 28px;
+   font-weight: 700;
+-  color: #ececec;
+   margin-bottom: 4px;
+-  letter-spacing: -0.5px;
++  background: linear-gradient(135deg, #4a90d9, #6c5ce7);
++  -webkit-background-clip: text;
++  -webkit-text-fill-color: transparent;
++  background-clip: text;
+ }
+ 
+ .splash-subtitle {
+   font-size: 14px;
+-  color: #6b6b6b;
+-  margin-bottom: 40px;
++  color: #888;
++  margin-bottom: 24px;
+ }
+ 
+ .splash-loader {
+-  width: 200px;
+   margin: 0 auto 12px;
++  width: 200px;
+ }
+ 
+ .splash-loader-track {
+-  width: 100%;
+   height: 3px;
+-  background: #2f2f2f;
++  background: #2a2a4a;
+   border-radius: 2px;
+   overflow: hidden;
+ }
+ 
+ .splash-loader-bar {
+   width: 30%;
+   height: 100%;
+-  background: linear-gradient(90deg, #10a37f, #1a9e7e);
++  background: linear-gradient(90deg, #4a90d9, #6c5ce7);
+   border-radius: 2px;
+-  animation: loaderMove 1.5s ease-in-out infinite;
++  animation: loader 1.5s ease-in-out infinite;
+ }
+ 
+-@keyframes loaderMove {
++@keyframes loader {
+   0% { transform: translateX(-100%); }
+-  100% { transform: translateX(400%); }
+-}
+-
+-#splash-screen.done .splash-loader-bar {
+-  width: 100%;
+-  animation: none;
+-  transition: width 0.3s ease;
++  100% { transform: translateX(350%); }
+ }
+ 
+ .splash-status {
+   font-size: 12px;
+-  color: #6b6b6b;
++  color: #666;
+ }
+ 
++/* Error Screen */
+ #error-screen {
+-  position: fixed;
++  position: absolute;
+   top: 0;
+   left: 0;
+-  width: 100%;
+-  height: 100%;
++  right: 0;
++  bottom: 0;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+-  background: #212121;
++  background: #1a1a2e;
+   z-index: 100;
+ }
+ 
+ #error-screen.hidden {
+   display: none;
+ }
+ 
+ .error-content {
+   text-align: center;
+-  max-width: 440px;
+-  padding: 40px;
++  max-width: 400px;
++  padding: 24px;
+ }
+ 
+ .error-content h1 {
+-  font-size: 24px;
+-  margin-bottom: 16px;
+-  color: #ececec;
++  font-size: 22px;
++  margin-bottom: 8px;
+ }
+ 
+-.error-content p {
+-  font-size: 14px;
+-  color: #b4b4b4;
++#error-message {
++  color: #e74c3c;
+   margin-bottom: 8px;
+-  line-height: 1.5;
++  font-size: 14px;
+ }
+ 
+ .error-hint {
+-  margin-bottom: 24px;
++  color: #888;
++  font-size: 13px;
++  margin-bottom: 20px;
+ }
+ 
+ .error-actions {
+   display: flex;
+-  flex-direction: column;
+-  gap: 10px;
+-  align-items: center;
++  gap: 12px;
++  justify-content: center;
+ }
+ 
+ .btn {
+-  padding: 10px 24px;
++  padding: 8px 20px;
++  border: none;
+   border-radius: 6px;
+-  font-size: 14px;
++  font-size: 13px;
+   cursor: pointer;
+-  border: none;
+-  min-width: 220px;
+-  transition: background 0.2s;
++  transition: background 0.15s;
+ }
+ 
+ .btn-primary {
+-  background: #10a37f;
+-  color: white;
++  background: #4a90d9;
++  color: #fff;
+ }
+ 
+ .btn-primary:hover {
+-  background: #0e8c6b;
++  background: #357abd;
+ }
+ 
+ .btn-secondary {
+-  background: #2f2f2f;
+-  color: #ececec;
+-  border: 1px solid #4a4a4a;
++  background: #2a2a4a;
++  color: #e0e0e0;
+ }
+ 
+ .btn-secondary:hover {
+-  background: #3a3a3a;
++  background: #3a3a5a;
+ }
