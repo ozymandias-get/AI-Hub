@@ -1,5 +1,5 @@
-appId: com.local.aidesktop
-productName: AI Desktop
+appId: com.local.aihub
+productName: AI Hub
 copyright: Copyright © 2026
 
 directories:
@@ -22,9 +22,21 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: AI Desktop
+  shortcutName: AI Hub
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
-  artifactName: AI-Desktop-Setup-${version}.exe
+  artifactName: AI-Hub-Setup-${version}.exe
   deleteAppDataOnUninstall: false
   runAfterFinish: true
+
+linux:
+  icon: assets/
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Utility
+  artifactName: AI-Hub-${version}.${ext}

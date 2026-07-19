@@ -1,16 +1,16 @@
-import { WebContentsView, app, Notification, shell, dialog, session } from 'electron';
+import { app, Notification, shell, dialog, Session } from 'electron';
 import * as path from 'path';
-import { promises as fs } from 'fs';
+import * as fs from 'fs';
 
-let downloadHandlerInstalled = false;
+const configuredSessions = new WeakSet<Session>();
 
-export function setupDownloads(_view: WebContentsView): void {
-  if (downloadHandlerInstalled) {
+export function setupDownloads(ses: Session): void {
+  if (configuredSessions.has(ses)) {
     return;
   }
-  downloadHandlerInstalled = true;
+  configuredSessions.add(ses);
 
-  session.defaultSession.on('will-download', async (_event, item) => {
+  ses.on('will-download', (_event, item) => {
     const downloadsPath = app.getPath('downloads');
     let filename = item.getFilename();
 
@@ -25,17 +25,13 @@ export function setupDownloads(_view: WebContentsView): void {
 
     let filePath = path.join(downloadsPath, filename);
     let counter = 1;
+    const MAX_RENAME_ATTEMPTS = 100;
 
-    while (true) {
-      try {
-        await fs.access(filePath);
-        const ext = path.extname(filename);
-        const name = path.basename(filename, ext);
-        filePath = path.join(downloadsPath, `${name} (${counter})${ext}`);
-        counter++;
-      } catch {
-        break;
-      }
+    while (fs.existsSync(filePath) && counter <= MAX_RENAME_ATTEMPTS) {
+      const ext = path.extname(filename);
+      const name = path.basename(filename, ext);
+      filePath = path.join(downloadsPath, `${name} (${counter})${ext}`);
+      counter++;
     }
 
     item.setSavePath(filePath);
@@ -61,3 +57,4 @@ export function setupDownloads(_view: WebContentsView): void {
     });
   });
 }
+

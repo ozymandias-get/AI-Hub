@@ -16,6 +16,6 @@ export const LOADING_BAR_TIMEOUT_MS = 300;
 export const SETTINGS_FILENAME = 'app-settings.json';
 export const DEFAULT_ZOOM_LEVEL = 1.0;
 
-export const APP_USER_MODEL_ID = 'com.local.aidesktop';
+export const APP_USER_MODEL_ID = 'com.local.aihub';
 
 export const TITLE_BAR_HEIGHT = 38;

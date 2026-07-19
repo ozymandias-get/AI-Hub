@@ -8,6 +8,7 @@ import {
   zoomReset,
   getCurrentServiceId,
   switchToService,
+  showHomepage,
 } from './service-view';
 import { SERVICE_CATEGORIES, getServiceById } from './services';
 import type { SettingsStore } from './settings-store';
@@ -37,12 +38,8 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
       submenu: [
         {
           label: 'Servis Değiştir',
-          accelerator: 'CmdOrCtrl+L',
           click: () => {
-            win.webContents.focus();
-            win.webContents.executeJavaScript(
-              "document.getElementById('category-select')?.focus();"
-            ).catch(() => {});
+            showHomepage(win, settings);
           },
         },
         { type: 'separator' },
@@ -74,6 +71,18 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
             app.quit();
           },
         },
+      ],
+    },
+    {
+      label: 'Düzenle',
+      submenu: [
+        { label: 'Geri Al', role: 'undo' },
+        { label: 'Yinele', role: 'redo' },
+        { type: 'separator' },
+        { label: 'Kes', role: 'cut' },
+        { label: 'Kopyala', role: 'copy' },
+        { label: 'Yapıştır', role: 'paste' },
+        { label: 'Tümünü Seç', role: 'selectAll' },
       ],
     },
     {
@@ -112,7 +121,7 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
         {
           label: 'Geri',
           accelerator: 'Alt+Left',
-          click: () => goBack(),
+          click: () => goBack(win, settings),
         },
         {
           label: 'İleri',
@@ -140,8 +149,8 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
           click: () => {
             dialog.showMessageBox(win, {
               type: 'info',
-              title: 'AI Desktop',
-              message: `AI Desktop v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
+              title: 'AI Hub',
+              message: `AI Hub v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
             }).catch((err) => console.warn('Failed to show version dialog:', err));
           },
         },

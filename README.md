@@ -1,104 +1,151 @@
-# ChatGPT Desktop
+# AI Hub
 
-ChatGPT web arayüzünü güvenli bir Electron kabuğunda çalıştıran Windows masaüstü uygulaması.
+<div align="center">
 
-## Özellikler
+**Türkçe • English** — İki dilli AI servis merkezi
 
-- ChatGPT web sitesini `WebContentsView` ile gösterir
-- Pencere boyutu/konumu ve zoom kalıcılığı
-- Klavye kısayolları (Ctrl+R, Ctrl+L, F11, vb.)
-- Türkçe uygulama menüsü
-- Dosya indirme + Windows bildirimi
-- Bağlantı hatası ekranı + yükleme çubuğu (IPC ile retry)
-- Sistem tepsisi desteği (menüden aç/kapa)
-- Güvenlik: sandbox, contextIsolation, nodeIntegration kapalı
-- Tek örnek kilidi (ikinci açılışı engeller)
-- OAuth domain desteği (Google, Apple, Microsoft, GitHub)
+![Electron](https://img.shields.io/badge/Electron-43+-47848F?logo=electron&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## Gereksinimler
+</div>
 
-- Node.js 18+
-- npm 9+
+**AI Hub** is a Windows desktop application that brings together 50+ AI services (ChatGPT, Claude, Perplexity, Midjourney, Bolt, and more) under one interface with **full bilingual support** (Turkish / English).
 
-## Kurulum
+Tüm yapay zeka modelleriniz tek bir yerde — UI ve servis açıklamaları Türkçe veya İngilizce, dilediğiniz gibi.
+
+![App Screenshot](docs/screenshots/dashboard.png)
+
+## Features
+
+- 🧠 **50+ AI Services** — Chat, writing, image, video, audio, code, productivity & research
+- 🌐 **Bilingual UI** — Switch between Turkish & English at any time. All UI strings, category names, and 80+ service descriptions are fully translated
+- 🌍 **Accept-Language Header** — Service websites automatically open in your selected language when supported
+- ⭐ **Favorites** — Star your most-used services for quick access
+- 🔍 **Search** — Find any service by name or description instantly
+- ⌨️ **Global Hotkey** — Show/hide the app from anywhere (`Alt+Space` by default)
+- 🖼️ **Frameless Glass UI** — Frosted matte dark glass design with spotlight hover effects
+- 🔒 **Security First** — Sandboxed `WebContentsView`, `contextIsolation: true`, `nodeIntegration: false`
+- 📥 **Download Management** — Automatic file downloads with Windows notifications
+- 🎛️ **Persistent Settings** — Window size, position, zoom level, and language preference are saved
+- 🛡️ **OAuth/SSO Ready** — Google, Apple, Microsoft, GitHub login support
+
+## Quick Start
 
 ```bash
+# Install dependencies
 npm install
-```
 
-## Geliştirme
-
-```bash
+# Build & run
 npm run dev
 ```
 
-Uygulamayı development modunda başlatır. Geliştirici araçlarına `Ctrl+Shift+I` ile erişilebilir.
+## Usage
+
+### Language Switching
+
+Open the dashboard and use the **🌐 App Language** dropdown to switch between Turkish and English. The setting is saved automatically — the app remembers your preference on next launch.
+
+![Language Switcher](docs/screenshots/language-switch.png)
+
+### Navigating Services
+
+- **Dashboard**: Browse services by category or search by name
+- **Click a card**: Launch the service in a secure embedded view
+- **Back / Home buttons**: Navigate within services or return to dashboard
+- **Star icon**: Add/remove services from favorites
+
+### Global Shortcut
+
+The default global hotkey is `Alt+Space`. Change it from the dashboard settings card.
 
 ## Build
 
 ```bash
+# Build both main & renderer
 npm run build
+
+# Type-check all targets
+npm run typecheck
 ```
 
-## Paketleme
-
-Windows kurulum dosyası oluşturmak için:
+## Package
 
 ```bash
+# Standard Windows build
 npm run dist
+
+# Windows NSIS installer
+npm run dist:installer
 ```
 
-Portable `.exe` oluşturmak için:
+Outputs are written to the `release/` folder.
 
-```bash
-npm run dist:portable
-```
-
-Çıktılar `release/` klasörüne yazılır.
-
-## Proje Yapısı
+## Project Structure
 
 ```
 src/
-├─ main/           # Electron main process
-│  ├─ main.ts            # Entry point, tek örnek kilidi
-│  ├─ window-manager.ts  # Pencere oluşturma ve kalıcılık
-│  ├─ chatgpt-view.ts    # WebContentsView yönetimi
-│  ├─ navigation-policy.ts # Gezinme kuralları
-│  ├─ permissions.ts     # İzin yönetimi
-│  ├─ downloads.ts       # Dosya indirme
-│  ├─ menu.ts            # Uygulama menüsü
-│  ├─ shortcuts.ts       # Klavye kısayolları
-│  ├─ settings-store.ts  # Ayarlar kalıcılığı
-│  ├─ ipc.ts             # Renderer IPC
-│  ├─ app-state.ts       # Çıkış bayrağı
-│  └─ tray.ts            # Sistem tepsisi
-├─ preload/
-│  └─ preload.ts         # Shell renderer bridge (contextBridge)
-└─ renderer/
-   ├─ index.html         # Hata ekranı
-   ├─ renderer.ts        # Retry / tarayıcıda aç
-   └─ styles.css         # Stiller
+├── main/                  # Electron main process
+│   ├── main.ts            # App bootstrap, single instance lock
+│   ├── window-manager.ts  # Window creation & positioning
+│   ├── service-view.ts    # WebContentsView lifecycle + Accept-Language
+│   ├── services.ts        # AI service definitions & categories
+│   ├── settings-store.ts  # Persistent settings (window, zoom, language)
+│   ├── ipc.ts             # IPC handlers (services, language, shortcuts)
+│   ├── navigation-policy.ts  # URL allowlist & external navigation
+│   ├── permissions.ts     # Media & clipboard permission management
+│   ├── downloads.ts       # File download handling & notifications
+│   ├── menu.ts            # Application menu
+│   ├── constants.ts       # App-wide constants
+│   ├── app-state.ts       # Quit state tracking
+│   └── tray.ts            # System tray integration
+├── preload/
+│   └── preload.ts         # Secure contextBridge API
+└── renderer/
+    ├── index.html         # Dashboard & splash screen UI
+    ├── renderer.ts        # Dashboard logic, service cards, search
+    ├── styles.css         # Frosted dark glass design system
+    ├── translations.ts    # Full bilingual translation map (200+ keys)
+    └── public/
+        └── logos/         # Service logo icons
 ```
 
-## Kısayollar
+## Keyboard Shortcuts
 
-| Kısayol | İşlem |
-|---------|-------|
-| Ctrl+R | Sayfayı yenile |
-| Ctrl+Shift+R | Önbelleği yok sayarak yenile |
-| Ctrl+L | ChatGPT ana sayfasına git |
-| Ctrl+= / Ctrl++ | Yakınlaştır |
-| Ctrl+- | Uzaklaştır |
-| Ctrl+0 | Yakınlaştırmayı sıfırla |
-| F11 | Tam ekran |
-| Alt+Left | Geri git |
-| Alt+Right | İleri git |
-| Ctrl+Shift+I | Geliştirici araçları (dev) |
-| Ctrl+Q | Çıkış |
+| Shortcut | Action |
+|----------|--------|
+| `Alt+Space` | Toggle app visibility (configurable) |
+| `Ctrl+R` | Reload service |
+| `Ctrl+Shift+R` | Reload ignoring cache |
+| `Ctrl+=` / `Ctrl++` | Zoom in |
+| `Ctrl+-` | Zoom out |
+| `Ctrl+0` | Reset zoom |
+| `F11` | Toggle fullscreen |
+| `Alt+Left` | Go back |
+| `Alt+Right` | Go forward |
+| `Ctrl+Shift+I` | DevTools (development only) |
+| `Ctrl+Q` | Quit |
 
-## Paket Bilgisi
+## Adding a New Language
 
-- Uygulama adı: `ChatGPT Desktop`
-- Paket kimliği: `com.local.chatgptdesktop`
-- Platform: Windows (x64)
+1. Edit `src/renderer/translations.ts` and add `'your_code'` entries to every key
+2. Add the option to the `<select id="language-select">` in `index.html`
+3. Update the `AppSettings.language` type in `settings-store.ts` to accept your new code
+4. Update `currentLanguage` type in `service-view.ts`
+
+## Tech Stack
+
+- **Runtime**: [Electron 43](https://www.electronjs.org/)
+- **Language**: [TypeScript 7](https://www.typescriptlang.org/)
+- **Renderer Build**: [Vite 8](https://vitejs.dev/)
+- **Main Build**: [tsup](https://tsup.egoist.dev/)
+- **Packaging**: [electron-builder](https://www.electron.build/)
+
+## Requirements
+
+- Node.js 18+
+- npm 9+
+
+## License
+
+MIT

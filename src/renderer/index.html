@@ -3,35 +3,123 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
-  <title>AI Desktop</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://*.google.com https://*.googleusercontent.com https://*.gstatic.com https://icons.duckduckgo.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'">
+  <title>AI Hub</title>
   <link rel="stylesheet" href="./styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="titlebar" class="titlebar">
+    <div class="titlebar-left">
+      <button id="back-btn" class="titlebar-btn" title="Geri">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      </button>
+      <button id="home-btn" class="titlebar-btn active" title="Ana Sayfa">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+      </button>
+    </div>
     <div class="titlebar-drag">
-      <span class="titlebar-text">AI Desktop</span>
+      <div class="titlebar-title-container">
+        <span class="titlebar-icon-sparkle">✦</span>
+        <span class="titlebar-text" id="titlebar-text">AI Hub</span>
+      </div>
     </div>
     <div class="titlebar-controls">
-      <select id="category-select" class="titlebar-select" aria-label="Kategori">
-        <option value="">Kategori Seç</option>
-      </select>
-      <select id="service-select" class="titlebar-select" aria-label="Servis">
-        <option value="">Servis Seç</option>
-      </select>
+      <select id="category-select" style="display: none;" aria-label="Kategori"></select>
+      <select id="service-select" style="display: none;" aria-label="Servis"></select>
       <div class="titlebar-btns">
-        <button id="minimize-btn" class="titlebar-btn" title="Küçült">─</button>
-        <button id="maximize-btn" class="titlebar-btn" title="Büyüt">□</button>
-        <button id="close-btn" class="titlebar-btn titlebar-close" title="Kapat">✕</button>
+        <button id="minimize-btn" class="titlebar-btn" title="Küçült">
+          <svg width="10" height="2" viewBox="0 0 10 2" fill="currentColor"><rect width="10" height="2" rx="1"/></svg>
+        </button>
+        <button id="maximize-btn" class="titlebar-btn" title="Büyüt">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="8" height="8" rx="1.5"/></svg>
+        </button>
+        <button id="close-btn" class="titlebar-btn titlebar-close" title="Kapat">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>
+        </button>
       </div>
     </div>
   </div>
 
   <div id="content-area" class="content-area">
-    <div id="splash-screen" class="active">
+    <div id="dashboard-view" class="dashboard-view">
+      <div class="dashboard-hero">
+        <h1 class="dashboard-title" id="dashboard-title">Yapay Zeka Dünyası</h1>
+        <p class="dashboard-subtitle" id="dashboard-subtitle">Tüm yapay zeka modelleri tek bir premium masaüstü uygulamasında.</p>
+        
+        <div class="search-container">
+          <input type="text" id="search-input" placeholder="Model veya servis ara..." autocomplete="off">
+          <span class="search-icon">🔍</span>
+        </div>
+      </div>
+
+      <div id="auth-warning-banner" class="notice-container">
+        <div class="notice-card">
+          <div class="notice-info">
+            <span class="notice-icon">⚠️</span>
+            <div>
+              <div class="notice-title">Giriş Uyarısı</div>
+              <div class="notice-desc">Google veya Apple ile oturum açma işlemleri güvenlik kısıtlamaları nedeniyle çalışmamaktadır. Lütfen e-posta ve şifrenizle giriş yapınız.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-container">
+        <div class="settings-card">
+          <div class="settings-info">
+            <span class="settings-icon">⌨️</span>
+            <div>
+              <div class="settings-title" id="settings-shortcut-title">Hızlı Erişim Kısayolu</div>
+              <div class="settings-desc" id="settings-shortcut-desc">Uygulamayı herhangi bir ekrandan anında açmak veya gizlemek için genel bir kısayol tuşu belirleyin.</div>
+            </div>
+          </div>
+          <div class="shortcut-selector-wrapper">
+            <select id="shortcut-select" class="shortcut-select" aria-label="Klavye Kısayolu">
+              <option value="Alt+Space">Alt + Space</option>
+              <option value="Ctrl+Space">Ctrl + Space</option>
+              <option value="CmdOrCtrl+Alt+Space">Ctrl + Alt + Space</option>
+              <option value="Ctrl+Shift+Space">Ctrl + Shift + Space</option>
+              <option value="Yok">Yok (Devre Dışı)</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-info">
+            <span class="settings-icon">🌐</span>
+            <div>
+              <div class="settings-title" id="settings-language-title">Uygulama Dili</div>
+              <div class="settings-desc" id="settings-language-desc">Arayüz dilini değiştirin. Servisler destekliyorsa seçtiğiniz dilde açılır.</div>
+            </div>
+          </div>
+          <div class="shortcut-selector-wrapper">
+            <select id="language-select" class="shortcut-select" aria-label="Uygulama Dili">
+              <option value="tr">Türkçe</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="categories-bar" id="categories-bar"></div>
+
+      <div class="services-container">
+        <div class="services-grid" id="services-grid"></div>
+      </div>
+    </div>
+
+    <div id="splash-screen" class="hidden">
       <div class="splash-bg"></div>
       <div class="splash-content">
-        <h1 class="splash-title">AI Desktop</h1>
+        <div class="splash-logo-wrapper">
+          <div id="splash-logo-container" class="splash-logo-container">
+            <img id="splash-logo-img" class="splash-logo-img hidden" src="" alt="">
+            <span id="splash-logo-fallback" class="splash-logo-fallback">✦</span>
+          </div>
+        </div>
+        <h1 class="splash-title" id="splash-title">AI Hub</h1>
         <p class="splash-subtitle" id="splash-subtitle">Yükleniyor...</p>
         <div class="splash-loader">
           <div class="splash-loader-track">

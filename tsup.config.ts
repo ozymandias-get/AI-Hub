@@ -9,7 +9,7 @@ export default defineConfig([
     clean: false,
     external: ['electron'],
     sourcemap: false,
-    minify: false,
+    minify: true,
     treeshake: true,
   },
   {
@@ -20,7 +20,7 @@ export default defineConfig([
     clean: false,
     external: ['electron'],
     sourcemap: false,
-    minify: false,
+    minify: true,
     treeshake: true,
   },
 ]);

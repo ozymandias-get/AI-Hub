@@ -10,6 +10,25 @@ import type { AIService } from './services';
 let currentView: WebContentsView | null = null;
 let settingsRef: SettingsStore | null = null;
 let currentServiceId: string | null = null;
+let currentLanguage: 'tr' | 'en' = 'tr';
+
+export function setLanguage(lang: 'tr' | 'en'): void {
+  currentLanguage = lang;
+}
+
+function getAcceptLanguage(): string {
+  return currentLanguage === 'tr'
+    ? 'tr-TR,tr;q=0.9,en-US,en;q=0.8'
+    : 'en-US,en;q=0.9,tr-TR,tr;q=0.8';
+}
+
+function applyLanguageToSession(session: Electron.Session): void {
+  session.webRequest.onBeforeSendHeaders((details, callback) => {
+    details.requestHeaders['Accept-Language'] = getAcceptLanguage();
+    callback({ requestHeaders: details.requestHeaders });
+  });
+}
+
 
 export function getCurrentView(): WebContentsView | null {
   return currentView;
@@ -58,12 +77,18 @@ export function createServiceView(service: AIService): WebContentsView {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: true,
+      partition: `persist:service-${service.id}`,
     },
   });
 
+  // Prevent white flash when loading or navigating sites
+  view.setBackgroundColor('#08080a');
+
   setupNavigationPolicy(view);
-  setupPermissions(view);
-  setupDownloads(view);
+  setupPermissions(view.webContents.session);
+  setupDownloads(view.webContents.session);
+  applyLanguageToSession(view.webContents.session);
 
   currentView = view;
   currentServiceId = service.id;
@@ -87,15 +112,26 @@ export function reloadService(ignoreCache: boolean = false): void {
   }
 }
 
-export function goBack(): void {
-  if (currentView && !currentView.webContents.isDestroyed() && currentView.webContents.navigationHistory.canGoBack()) {
-    currentView.webContents.navigationHistory.goBack();
+export function goBack(win?: BrowserWindow, settings?: SettingsStore): void {
+  if (currentView && !currentView.webContents.isDestroyed()) {
+    const navHistory = currentView.webContents.navigationHistory;
+    if (navHistory && navHistory.canGoBack()) {
+      navHistory.goBack();
+      return;
+    }
+  }
+
+  if (win && settings) {
+    showHomepage(win, settings);
   }
 }
 
 export function goForward(): void {
-  if (currentView && !currentView.webContents.isDestroyed() && currentView.webContents.navigationHistory.canGoForward()) {
-    currentView.webContents.navigationHistory.goForward();
+  if (currentView && !currentView.webContents.isDestroyed()) {
+    const navHistory = currentView.webContents.navigationHistory;
+    if (navHistory && navHistory.canGoForward()) {
+      navHistory.goForward();
+    }
   }
 }
 
@@ -141,11 +177,16 @@ export function resizeViewToWindow(win: BrowserWindow): void {
     x: 0,
     y: TITLE_BAR_HEIGHT,
     width: contentBounds.width,
-    height: contentBounds.height - TITLE_BAR_HEIGHT,
+    height: Math.max(0, contentBounds.height - TITLE_BAR_HEIGHT),
   });
 }
 
-export function switchToService(serviceId: string, win: BrowserWindow, settings: SettingsStore): void {
+export function switchToService(
+  serviceId: string,
+  win: BrowserWindow,
+  settings: SettingsStore,
+  customUrl?: string
+): void {
   const service = getServiceById(serviceId) ?? getDefaultService();
 
   settings.setWindow({ lastService: service.id });
@@ -159,6 +200,7 @@ export function switchToService(serviceId: string, win: BrowserWindow, settings:
   view.webContents.on('did-start-loading', () => {
     if (win.isDestroyed()) return;
     win.setProgressBar(-1, { mode: 'indeterminate' });
+    win.webContents.send('service-loading-start');
   });
 
   view.webContents.on('did-stop-loading', () => {
@@ -170,17 +212,7 @@ export function switchToService(serviceId: string, win: BrowserWindow, settings:
       viewAttached = true;
       view.webContents.focus();
     }
-    win.webContents.executeJavaScript(
-      `(() => {
-        const splash = document.getElementById('splash-screen');
-        if (splash) splash.classList.add('done');
-        if (window.__splashTimer) clearTimeout(window.__splashTimer);
-        window.__splashTimer = setTimeout(() => {
-          if (splash) splash.classList.add('hidden');
-          window.__splashTimer = null;
-        }, 600);
-      })();`
-    ).catch(() => {});
+    win.webContents.send('service-loading-stop');
   });
 
   view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
@@ -191,27 +223,105 @@ export function switchToService(serviceId: string, win: BrowserWindow, settings:
       try { win.contentView.removeChildView(view); } catch {}
       viewAttached = false;
     }
-    const desc = (errorDescription || 'Bilinmeyen hata').replace(/'/g, "\\'");
-    win.webContents.executeJavaScript(
-      `(() => {
-        document.getElementById('splash-screen')?.classList.add('hidden');
-        const msg = document.getElementById('error-message');
-        if (msg) msg.textContent = '${desc}';
-        document.getElementById('error-screen')?.classList.remove('hidden');
-      })();`
-    ).catch(() => {});
+    const errMsg = errorDescription || (currentLanguage === 'tr' ? 'Bilinmeyen hata' : 'Unknown error');
+    win.webContents.send('service-loading-error', errMsg);
   });
 
-  loadServiceURL(service);
+  if (customUrl) {
+    if (currentView && !currentView.webContents.isDestroyed()) {
+      currentView.webContents.loadURL(customUrl);
+      currentServiceId = service.id;
+    }
+  } else {
+    loadServiceURL(service);
+  }
 
-  win.setTitle(`AI Desktop - ${service.name}`);
-  const name = service.name.replace(/'/g, "\\'");
-  win.webContents.executeJavaScript(
-    `(() => {
-      document.getElementById('titlebar-text')!.textContent = 'AI Desktop - ${name}';
-      document.getElementById('splash-subtitle')!.textContent = '${name}';
-      document.getElementById('service-select')!.value = '${service.id}';
-      document.title = 'AI Desktop - ${name}';
-    })();`
-  ).catch(() => {});
+  win.setTitle(`AI Hub - ${service.name}`);
+  win.webContents.send('update-service-ui', {
+    serviceId: service.id,
+    name: service.name,
+    isHome: false,
+  });
+}
+
+export function showHomepage(win: BrowserWindow, settings: SettingsStore): void {
+  if (currentView) {
+    if (!win.isDestroyed()) {
+      try {
+        win.contentView.removeChildView(currentView);
+      } catch (err) {
+        // Not attached
+      }
+    }
+    try {
+      const wc = currentView.webContents;
+      if (!wc.isDestroyed()) {
+        wc.close();
+      }
+    } catch (err) {
+      console.warn('[ServiceView] Failed to close previous view:', err);
+    }
+    currentView = null;
+  }
+  currentServiceId = null;
+
+  settings.setWindow({ lastService: '' });
+  settings.save();
+
+  if (!win.isDestroyed()) {
+    win.setTitle('AI Hub');
+    win.webContents.send('update-service-ui', {
+      isHome: true,
+    });
+  }
+}
+
+/**
+ * Detach the current view from all windows without destroying it.
+ * The view stays alive in memory so it can be quickly re-attached.
+ */
+function detachCurrentView(): void {
+  if (!currentView) return;
+  const wins = BrowserWindow.getAllWindows();
+  for (const win of wins) {
+    if (!win.isDestroyed()) {
+      try {
+        win.contentView.removeChildView(currentView);
+      } catch {
+        // View may not be attached to this window
+      }
+    }
+  }
+}
+
+export function suspendActiveService(): void {
+  if (currentView && !currentView.webContents.isDestroyed()) {
+    console.log('[ServiceView] Suspending active service (detach only, keeping in memory)');
+    // Mute audio to save resources while hidden
+    currentView.webContents.setAudioMuted(true);
+    // Detach from window but keep alive — avoids full page reload on resume
+    detachCurrentView();
+  }
+}
+
+export function resumeActiveService(win: BrowserWindow, settings: SettingsStore): void {
+  if (win.isDestroyed()) return;
+
+  const lastServiceId = settings.getWindow().lastService;
+  if (!lastServiceId) {
+    showHomepage(win, settings);
+    return;
+  }
+
+  // If the view is still alive and matches the expected service, re-attach it
+  if (currentView && !currentView.webContents.isDestroyed() && currentServiceId === lastServiceId) {
+    currentView.webContents.setAudioMuted(false);
+    win.contentView.addChildView(currentView);
+    resizeViewToWindow(win);
+    currentView.webContents.focus();
+    return;
+  }
+
+  // View was destroyed or service changed — fall back to full reload
+  switchToService(lastServiceId, win, settings);
 }

@@ -24,6 +24,8 @@ export interface WindowSettings {
 export interface AppSettings {
   window: WindowSettings;
   minimizeToTray: boolean;
+  globalShortcut: string;
+  language: 'tr' | 'en';
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -37,6 +39,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     lastService: 'chatgpt',
   },
   minimizeToTray: false,
+  globalShortcut: 'Alt+Space',
+  language: 'tr',
 };
 
 function clampZoom(factor: number): number {
@@ -49,13 +53,17 @@ function clampZoom(factor: number): number {
 export class SettingsStore {
   private settings: AppSettings;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private cachedPath: string | null = null;
 
   constructor() {
     this.settings = this.load();
   }
 
   private get filePath(): string {
-    return path.join(app.getPath('userData'), SETTINGS_FILENAME);
+    if (!this.cachedPath) {
+      this.cachedPath = path.join(app.getPath('userData'), SETTINGS_FILENAME);
+    }
+    return this.cachedPath;
   }
 
   private load(): AppSettings {
@@ -68,6 +76,8 @@ export class SettingsStore {
         return {
           window,
           minimizeToTray: parsed.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
+          globalShortcut: parsed.globalShortcut ?? DEFAULT_SETTINGS.globalShortcut,
+          language: (parsed.language === 'tr' || parsed.language === 'en') ? parsed.language : DEFAULT_SETTINGS.language,
         };
       }
     } catch (err) {
@@ -76,15 +86,29 @@ export class SettingsStore {
     return { ...DEFAULT_SETTINGS, window: { ...DEFAULT_SETTINGS.window } };
   }
 
-  private write(): void {
+  private async writeAsync(): Promise<void> {
     try {
-      const dir = path.dirname(this.filePath);
+      const filePath = this.filePath;
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        await fs.promises.mkdir(dir, { recursive: true });
+      }
+      await fs.promises.writeFile(filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('[SettingsStore] Failed to save settings asynchronously:', err);
+    }
+  }
+
+  private writeSync(): void {
+    try {
+      const filePath = this.filePath;
+      const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(this.filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
+      fs.writeFileSync(filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
     } catch (err) {
-      console.error('[SettingsStore] Failed to save settings:', err);
+      console.error('[SettingsStore] Failed to save settings synchronously:', err);
     }
   }
 
@@ -94,7 +118,7 @@ export class SettingsStore {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.write();
+      this.writeAsync().catch(() => {});
     }, 200);
   }
 
@@ -103,7 +127,7 @@ export class SettingsStore {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    this.write();
+    this.writeSync();
   }
 
   get<K extends keyof AppSettings>(key: K): AppSettings[K] {

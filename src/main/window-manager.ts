@@ -13,7 +13,7 @@ export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
 }
 
-export function createMainWindow(settings: SettingsStore): BrowserWindow {
+export function createMainWindow(settings: SettingsStore, shouldShow: boolean = true): BrowserWindow {
   const winSettings = settings.getWindow();
 
   const win = new BrowserWindow({
@@ -26,6 +26,7 @@ export function createMainWindow(settings: SettingsStore): BrowserWindow {
     show: false,
     frame: false,
     titleBarStyle: 'hidden',
+    backgroundColor: '#08080a',
     icon: path.join(__dirname, '../../assets/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
@@ -36,29 +37,18 @@ export function createMainWindow(settings: SettingsStore): BrowserWindow {
     },
   });
 
-  if (winSettings.isMaximized) {
+  if (winSettings.isMaximized && shouldShow) {
     win.maximize();
   }
 
-  win.once('ready-to-show', () => {
-    win.show();
-  });
+  if (shouldShow) {
+    win.once('ready-to-show', () => {
+      win.show();
+    });
+  }
 
-  win.on('close', () => {
-    // Runs on every close attempt, even if minimize-to-tray cancels it later.
-    const maximized = win.isMaximized();
-    if (!maximized) {
-      const bounds = win.getBounds();
-      settings.setWindow({
-        width: bounds.width,
-        height: bounds.height,
-        x: bounds.x,
-        y: bounds.y,
-      });
-    }
-    settings.setWindow({ isMaximized: maximized });
-    settings.saveSync();
-  });
+  // Window state saving is handled by main.ts bootstrapWindow close handler
+  // to avoid duplicate synchronous disk writes
 
   win.on('closed', () => {
     mainWindow = null;

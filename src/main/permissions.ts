@@ -1,34 +1,17 @@
-import { WebContentsView, session } from 'electron';
-import { CHATGPT_URL } from './constants';
+import { Session } from 'electron';
+import { isAllowedUrl } from './navigation-policy';
 
-const CHATGPT_ORIGIN = new URL(CHATGPT_URL).origin;
-
-const ALLOWED_MEDIA_HOSTS = [
-  'chatgpt.com',
-  'chat.openai.com',
-  'openai.com',
-];
-
-let permissionHandlersInstalled = false;
+const configuredSessions = new WeakSet<Session>();
 
 function isMediaOriginAllowed(origin: string): boolean {
-  try {
-    const host = new URL(origin).hostname.toLowerCase();
-    return ALLOWED_MEDIA_HOSTS.some(
-      (allowed) => host === allowed || host.endsWith(`.${allowed}`)
-    );
-  } catch {
-    return origin === CHATGPT_ORIGIN;
-  }
+  return isAllowedUrl(origin);
 }
 
-export function setupPermissions(_view: WebContentsView): void {
-  if (permissionHandlersInstalled) {
+export function setupPermissions(ses: Session): void {
+  if (configuredSessions.has(ses)) {
     return;
   }
-  permissionHandlersInstalled = true;
-
-  const ses = session.defaultSession;
+  configuredSessions.add(ses);
 
   ses.setPermissionRequestHandler((webContents, permission, callback) => {
     const url = webContents.getURL();
