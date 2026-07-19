@@ -31,6 +31,7 @@ nsis:
 
 linux:
   icon: assets/
+  maintainer: AI Hub <aihub@example.com>
   target:
     - target: AppImage
       arch:
@@ -40,3 +41,4 @@ linux:
         - x64
   category: Utility
   artifactName: AI-Hub-${version}.${ext}
+  syncDesktopName: true
