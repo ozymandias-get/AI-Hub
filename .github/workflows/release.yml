@@ -81,7 +81,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: AI Hub ${{ github.ref_name }}
-          body_path: CHANGELOG.md
           files: |
             AI-Hub-Setup-*.exe
             AI-Hub-*.AppImage
