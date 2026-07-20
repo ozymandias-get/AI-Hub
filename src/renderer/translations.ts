@@ -34,6 +34,7 @@ export const translations: TransMap = {
   'category.code': { tr: 'Kod', en: 'Code' },
   'category.productivity': { tr: 'Sunum & Üretkenlik', en: 'Presentation & Productivity' },
   'category.research': { tr: 'Araştırma & Akademik', en: 'Research & Academic' },
+  'category.corporate': { tr: 'Kurumsal', en: 'Corporate' },
 
   'favorite.add': { tr: 'Favorilere Ekle', en: 'Add to Favorites' },
   'favorite.remove': { tr: 'Favorilerden Çıkar', en: 'Remove from Favorites' },
@@ -168,4 +169,5 @@ export const translations: TransMap = {
   'desc.consensus': { tr: 'Bilimsel araştırmalardan doğrudan kanıta dayalı yanıtlar çıkaran arama motoru.', en: 'Search engine that extracts evidence-based answers from scientific research.' },
   'desc.scite': { tr: 'Akademik bildiri ve makalelerin nasıl alıntılandığını analiz eden platform.', en: 'Platform that analyzes how academic papers and articles are cited.' },
   'desc.scispace': { tr: 'Karmaşık bilimsel makaleleri basitleştiren ve açıklayan araştırma yardımcısı.', en: 'Research assistant that simplifies and explains complex scientific papers.' },
+  'desc.microsoft365': { tr: 'Microsoft 365 ekosistemiyle tam entegre, iş ve kurumsal kullanım için yapay zeka asistanı.', en: 'AI assistant fully integrated with Microsoft 365 ecosystem for business and enterprise use.' },
 };

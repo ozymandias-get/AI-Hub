@@ -160,6 +160,13 @@ export const SERVICE_CATEGORIES: AIServiceCategory[] = [
       { id: 'scispace', name: 'SciSpace', url: 'https://scispace.com', category: 'research' },
     ],
   },
+  {
+    name: 'Kurumsal',
+    key: 'corporate',
+    services: [
+      { id: 'microsoft365', name: 'Microsoft 365 Copilot', url: 'https://m365.cloud.microsoft/chat', category: 'corporate' },
+    ],
+  },
 ];
 
 // Cached flat list and lookup map — computed once, O(1) lookups

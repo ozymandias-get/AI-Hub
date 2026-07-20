@@ -60,6 +60,7 @@ const categoryIcons: Record<string, string> = {
   code: '💻',
   productivity: '⚡',
   research: '🔬',
+  corporate: '🏢',
 };
 
 function getServiceDesc(id: string): string {
