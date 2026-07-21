@@ -6,11 +6,11 @@ export default defineConfig([
     format: ['cjs'],
     target: 'node18',
     outDir: 'dist/main',
-    clean: false,
+    clean: true,
     external: ['electron'],
     sourcemap: false,
     minify: true,
-    treeshake: true,
+    treeshake: false,
   },
   {
     entry: { preload: 'src/preload/preload.ts' },
@@ -21,6 +21,6 @@ export default defineConfig([
     external: ['electron'],
     sourcemap: false,
     minify: true,
-    treeshake: true,
+    treeshake: false,
   },
 ]);

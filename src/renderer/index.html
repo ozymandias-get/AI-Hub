@@ -21,9 +21,11 @@
       </button>
     </div>
     <div class="titlebar-drag">
-      <div class="titlebar-title-container">
-        <span class="titlebar-icon-sparkle">✦</span>
-        <span class="titlebar-text" id="titlebar-text">AI Hub</span>
+      <div class="tabs-container" id="tabs-container">
+        <div class="tabs-list" id="tabs-list"></div>
+        <button id="new-tab-btn" class="new-tab-btn" title="Yeni Sekme">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
       </div>
     </div>
     <div class="titlebar-controls">
@@ -46,31 +48,43 @@
   <div id="content-area" class="content-area">
     <div id="dashboard-view" class="dashboard-view">
       <div class="dashboard-hero">
+        <div class="dashboard-badge">
+          <span class="badge-sparkle">✦</span>
+          <span>PREMİUM AI WORKSPACE</span>
+        </div>
         <h1 class="dashboard-title" id="dashboard-title">Yapay Zeka Dünyası</h1>
         <p class="dashboard-subtitle" id="dashboard-subtitle">Tüm yapay zeka modelleri tek bir premium masaüstü uygulamasında.</p>
         
         <div class="search-container">
           <input type="text" id="search-input" placeholder="Model veya servis ara..." autocomplete="off">
-          <span class="search-icon">🔍</span>
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <kbd class="search-shortcut">⌘K</kbd>
         </div>
       </div>
 
       <div id="auth-warning-banner" class="notice-container">
         <div class="notice-card">
           <div class="notice-info">
-            <span class="notice-icon">⚠️</span>
-            <div>
+            <div class="notice-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div class="notice-text-content">
               <div class="notice-title">Giriş Uyarısı</div>
               <div class="notice-desc">Google veya Apple ile oturum açma işlemleri güvenlik kısıtlamaları nedeniyle çalışmamaktadır. Lütfen e-posta ve şifrenizle giriş yapınız.</div>
             </div>
           </div>
+          <button id="notice-close-btn" class="notice-close" title="Kapat" aria-label="Kapat">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
         </div>
       </div>
 
       <div class="settings-container">
         <div class="settings-card">
           <div class="settings-info">
-            <span class="settings-icon">⌨️</span>
+            <div class="settings-icon shortcut-icon-bg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="3"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg>
+            </div>
             <div>
               <div class="settings-title" id="settings-shortcut-title">Hızlı Erişim Kısayolu</div>
               <div class="settings-desc" id="settings-shortcut-desc">Uygulamayı herhangi bir ekrandan anında açmak veya gizlemek için genel bir kısayol tuşu belirleyin.</div>
@@ -84,11 +98,14 @@
               <option value="Ctrl+Shift+Space">Ctrl + Shift + Space</option>
               <option value="Yok">Yok (Devre Dışı)</option>
             </select>
+            <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
           </div>
         </div>
         <div class="settings-card">
           <div class="settings-info">
-            <span class="settings-icon">🌐</span>
+            <div class="settings-icon lang-icon-bg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            </div>
             <div>
               <div class="settings-title" id="settings-language-title">Uygulama Dili</div>
               <div class="settings-desc" id="settings-language-desc">Arayüz dilini değiştirin. Servisler destekliyorsa seçtiğiniz dilde açılır.</div>
@@ -99,6 +116,7 @@
               <option value="tr">Türkçe</option>
               <option value="en">English</option>
             </select>
+            <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
           </div>
         </div>
       </div>

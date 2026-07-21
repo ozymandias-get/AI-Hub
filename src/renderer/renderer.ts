@@ -6,7 +6,6 @@ function t(key: string): string {
   return translations[key]?.[currentLanguage] ?? key;
 }
 
-const titlebarText = document.getElementById('titlebar-text')!;
 const categorySelect = document.getElementById('category-select') as HTMLSelectElement;
 const serviceSelect = document.getElementById('service-select') as HTMLSelectElement;
 const splashScreen = document.getElementById('splash-screen')!;
@@ -16,7 +15,7 @@ const errorScreen = document.getElementById('error-screen')!;
 const errorMessage = document.getElementById('error-message')!;
 const retryButton = document.getElementById('retry-button')!;
 
-// New dashboard elements
+// Dashboard & Titlebar elements
 const backBtn = document.getElementById('back-btn')!;
 const homeBtn = document.getElementById('home-btn')!;
 const dashboardView = document.getElementById('dashboard-view')!;
@@ -26,7 +25,8 @@ const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const shortcutSelect = document.getElementById('shortcut-select') as HTMLSelectElement;
 const maximizeBtn = document.getElementById('maximize-btn')!;
 const languageSelect = document.getElementById('language-select') as HTMLSelectElement;
-
+const tabsList = document.getElementById('tabs-list')!;
+const newTabBtn = document.getElementById('new-tab-btn')!;
 
 interface AIService {
   id: string;
@@ -39,6 +39,14 @@ interface AIServiceCategory {
   name: string;
   key: string;
   services: AIService[];
+}
+
+interface TabInfo {
+  id: string;
+  serviceId: string | null;
+  name: string;
+  isHome: boolean;
+  isLoading: boolean;
 }
 
 let categories: AIServiceCategory[] = [];
@@ -83,7 +91,6 @@ function rebuildDescriptionsLower(): void {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  console.log('[Renderer] DOMContentLoaded started');
   // Setup window controls
   const minimizeBtn = document.getElementById('minimize-btn')!;
   const closeBtn = document.getElementById('close-btn')!;
@@ -105,12 +112,29 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.aiDesktop.showHomepage();
   });
 
+  // Setup New Tab button
+  newTabBtn.addEventListener('click', () => {
+    window.aiDesktop.createTab();
+  });
 
+  // Setup notice banner dismiss button
+  const noticeCloseBtn = document.getElementById('notice-close-btn');
+  const authWarningBanner = document.getElementById('auth-warning-banner');
+  if (noticeCloseBtn && authWarningBanner) {
+    noticeCloseBtn.addEventListener('click', () => {
+      authWarningBanner.style.opacity = '0';
+      authWarningBanner.style.transform = 'translateY(-8px)';
+      authWarningBanner.style.transition = 'all 0.25s ease';
+      setTimeout(() => {
+        authWarningBanner.classList.add('hidden');
+      }, 250);
+    });
+  }
 
   // Delegated spotlight hover effect with rAF to prevent layout thrashing
   let spotlightRafId: number | null = null;
   servicesGrid.addEventListener('mousemove', (e) => {
-    if (spotlightRafId) return; // Skip if a frame is already scheduled
+    if (spotlightRafId) return;
     const clientX = e.clientX;
     const clientY = e.clientY;
     const target = e.target as HTMLElement;
@@ -136,25 +160,37 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Load data
   try {
-    console.log('[Renderer] Fetching services...');
     categories = await window.aiDesktop.getServices();
-    console.log('[Renderer] Services fetched:', categories ? categories.length : 0);
   } catch (err) {
     console.error('[Renderer] Failed to load services:', err);
   }
   
-  // Populate fallback selects for backward compatibility
   populateFallbackSelects();
-
-  // Populate Dashboard category tabs and services grid
   populateDashboardCategories();
   renderServices();
 
+  // Load initial Tab state
+  try {
+    if (window.aiDesktop.getTabsState) {
+      const tabsState = await window.aiDesktop.getTabsState();
+      if (tabsState) {
+        renderTabs(tabsState.tabs, tabsState.activeTabId);
+      }
+    }
+  } catch (err) {
+    console.warn('[Renderer] Failed to fetch initial tabs state:', err);
+  }
+
+  // Bind Tab updates
+  if (window.aiDesktop.onTabsUpdated) {
+    window.aiDesktop.onTabsUpdated((data) => {
+      renderTabs(data.tabs, data.activeTabId);
+    });
+  }
+
   // Set initial active state from settings
   try {
-    console.log('[Renderer] Fetching current service ID...');
     const currentId = await window.aiDesktop.getCurrentServiceId();
-    console.log('[Renderer] Current service ID:', currentId);
     if (currentId) {
       switchToServiceUI(currentId);
       const loading = await window.aiDesktop.isServiceLoading();
@@ -286,6 +322,70 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+function renderTabs(tabs: TabInfo[], activeTabId: string | null): void {
+  if (!tabsList) return;
+  tabsList.innerHTML = '';
+
+  const fragment = document.createDocumentFragment();
+
+  for (const tab of tabs) {
+    const tabEl = document.createElement('div');
+    const isActive = tab.id === activeTabId;
+    tabEl.className = `tab-item ${isActive ? 'active' : ''}`;
+
+    let iconHtml = '';
+    if (tab.isHome) {
+      iconHtml = `<span class="tab-icon">🏠</span>`;
+    } else if (tab.serviceId) {
+      iconHtml = `
+        <span class="tab-icon">
+          <img src="./logos/${tab.serviceId}.png" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width:14px;height:14px;object-fit:contain;">
+          <span style="display:none; font-size:10px;">${tab.name.charAt(0)}</span>
+        </span>
+      `;
+    } else {
+      iconHtml = `<span class="tab-icon">✦</span>`;
+    }
+
+    const titleText = tab.isHome ? (currentLanguage === 'tr' ? 'Ana Sayfa' : 'Home') : tab.name;
+
+    tabEl.innerHTML = `
+      ${iconHtml}
+      <span class="tab-title">${titleText}</span>
+      <button class="tab-close-btn" title="${t('titlebar.close')}">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    `;
+
+    // Tab switch on click
+    tabEl.addEventListener('click', () => {
+      window.aiDesktop.switchTab(tab.id);
+    });
+
+    // Middle click to close tab
+    tabEl.addEventListener('auxclick', (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.aiDesktop.closeTab(tab.id);
+      }
+    });
+
+    // Close button click
+    const closeBtn = tabEl.querySelector('.tab-close-btn') as HTMLButtonElement;
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.aiDesktop.closeTab(tab.id);
+      });
+    }
+
+    fragment.appendChild(tabEl);
+  }
+
+  tabsList.appendChild(fragment);
+}
+
 function switchLanguage(lang: Language): void {
   currentLanguage = lang;
   localStorage.setItem('app_language', lang);
@@ -305,6 +405,7 @@ function applyUILanguage(): void {
   searchInput.placeholder = t('search.placeholder');
   backBtn.title = t('titlebar.back');
   homeBtn.title = t('titlebar.home');
+  newTabBtn.title = currentLanguage === 'tr' ? 'Yeni Sekme' : 'New Tab';
 
   const minimizeBtn = document.getElementById('minimize-btn')!;
   const closeBtn = document.getElementById('close-btn')!;
@@ -412,7 +513,7 @@ function selectCategory(categoryKey: string, tabElement: HTMLButtonElement): voi
 }
 
 function renderServices(): void {
-  servicesGrid.replaceChildren(); // More performant than innerHTML = ''
+  servicesGrid.replaceChildren();
 
   let allServices: AIService[] = [];
   if (activeCategoryKey === 'all') {
@@ -426,7 +527,6 @@ function renderServices(): void {
     }
   }
 
-  // Filter by search query using pre-computed lowercase cache
   const filtered = allServices.filter(s => 
     s.name.toLowerCase().includes(searchQuery) || 
     (serviceDescriptionsLower[s.id] && serviceDescriptionsLower[s.id].includes(searchQuery))
@@ -509,8 +609,16 @@ function renderServices(): void {
       });
     }
 
-    card.addEventListener('click', () => {
-      launchService(svc.id);
+    card.addEventListener('click', (e: MouseEvent) => {
+      const openInNewTab = e.ctrlKey || e.metaKey || e.button === 1;
+      launchService(svc.id, openInNewTab);
+    });
+
+    card.addEventListener('auxclick', (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        launchService(svc.id, true);
+      }
     });
 
     fragment.appendChild(card);
@@ -571,7 +679,7 @@ function updateSplashLogo(serviceId: string | null): void {
   splashLogoFallback.style.display = 'inline';
 }
 
-function launchService(serviceId: string): void {
+function launchService(serviceId: string, openInNewTab: boolean = false): void {
   currentServiceId = serviceId;
   errorScreen.classList.add('hidden');
   
@@ -583,7 +691,6 @@ function launchService(serviceId: string): void {
   const svc = categories.flatMap(c => c.services).find(s => s.id === serviceId);
   if (svc) {
     splashSubtitle.textContent = svc.name;
-    titlebarText.textContent = `${t('app.title')} - ${svc.name}`;
     document.title = `${t('app.title')} - ${svc.name}`;
   }
 
@@ -593,7 +700,7 @@ function launchService(serviceId: string): void {
     serviceSelect.value = svc.id;
   }
 
-  window.aiDesktop.selectService(serviceId);
+  window.aiDesktop.openServiceInTab(serviceId, openInNewTab);
 }
 
 function showHomepageUI(): void {
@@ -602,7 +709,6 @@ function showHomepageUI(): void {
   dashboardView.classList.remove('hidden');
   splashScreen.classList.add('hidden');
   errorScreen.classList.add('hidden');
-  titlebarText.textContent = t('app.title');
   document.title = t('app.title');
 }
 
@@ -613,7 +719,6 @@ function switchToServiceUI(serviceId: string): void {
   
   const svc = categories.flatMap(c => c.services).find(s => s.id === serviceId);
   if (svc) {
-    titlebarText.textContent = `${t('app.title')} - ${svc.name}`;
     document.title = `${t('app.title')} - ${svc.name}`;
     
     if (categorySelect && serviceSelect) {

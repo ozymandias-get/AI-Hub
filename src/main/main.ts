@@ -9,7 +9,7 @@ import {
   setLanguage,
   restoreZoomLevel,
   resizeViewToWindow,
-  switchToService,
+  createTab,
   showHomepage,
   suspendActiveService,
   resumeActiveService,
@@ -65,6 +65,11 @@ if (!gotSingleInstanceLock) {
       ]);
       menu.popup();
     });
+  });
+
+  app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+    event.preventDefault();
+    callback(true);
   });
 
   app.on('second-instance', () => {
@@ -131,19 +136,29 @@ function bootstrapWindow(): void {
   }
 
   const isBg = isLaunchedInBackground();
-  console.log('[App] isLaunchedInBackground:', isBg, 'argv:', process.argv);
   const win = createMainWindow(settings, !isBg);
   ensureWindowVisible();
 
-  // Only forward renderer console messages in development to reduce IPC overhead
+  // Forward renderer console errors/warnings only
   if (!app.isPackaged) {
     win.webContents.on('console-message', (event: any, ...args: any[]) => {
+      let level = 0;
+      let message = '';
+      let line = 0;
+      let sourceId = '';
+
       if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
-        const details = args[0];
-        console.log(`[Renderer Console] [Level ${details.level}] ${details.message} (at ${details.sourceId}:${details.line})`);
+        level = args[0].level ?? 0;
+        message = args[0].message ?? '';
+        line = args[0].line ?? 0;
+        sourceId = args[0].sourceId ?? '';
       } else {
-        const [level, message, line, sourceId] = args;
-        console.log(`[Renderer Console] [Level ${level}] ${message} (at ${sourceId}:${line})`);
+        [level, message, line, sourceId] = args;
+      }
+
+      // Filter: Only log warnings (level 2) and errors (level 3)
+      if (level >= 2) {
+        console.error(`[Renderer Error] [Level ${level}] ${message} (at ${sourceId}:${line})`);
       }
     });
   }
@@ -169,16 +184,9 @@ function bootstrapWindow(): void {
     resumeActiveService(win, settings);
   });
 
-  // Initial load logic
-  if (isBg) {
-    // Rely on 'show' event listener (handled above) to load service on first show.
-  } else {
-    const lastServiceId = settings.getWindow().lastService;
-    if (lastServiceId) {
-      switchToService(lastServiceId, win, settings);
-    } else {
-      showHomepage(win, settings);
-    }
+  // Initial load logic: Always open on Home Page
+  if (!isBg) {
+    createTab(undefined, win, settings);
   }
 
   setupMenu(win, settings);
@@ -242,7 +250,6 @@ function registerGlobalHotkey(shortcut: string, win: BrowserWindow): void {
   globalShortcut.unregisterAll();
 
   if (!shortcut || shortcut === 'Yok' || shortcut === 'None') {
-    console.log('[App] Global hotkey disabled');
     return;
   }
 
@@ -260,8 +267,6 @@ function registerGlobalHotkey(shortcut: string, win: BrowserWindow): void {
 
     if (!isRegistered) {
       console.warn(`[App] Failed to register global hotkey: ${shortcut}`);
-    } else {
-      console.log(`[App] Registered global hotkey: ${shortcut}`);
     }
   } catch (err) {
     console.error(`[App] Error registering global hotkey ${shortcut}:`, err);

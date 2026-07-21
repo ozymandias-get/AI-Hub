@@ -16,6 +16,19 @@ contextBridge.exposeInMainWorld('aiDesktop', {
   openExternal: (url: string): void => ipcRenderer.send('open-external', url),
   getGlobalShortcut: (): Promise<string> => ipcRenderer.invoke('get-global-shortcut'),
   setGlobalShortcut: (shortcut: string): void => ipcRenderer.send('set-global-shortcut', shortcut),
+  
+  // Tab Management API
+  getTabsState: (): Promise<{ tabs: any[]; activeTabId: string | null }> => ipcRenderer.invoke('get-tabs-state'),
+  createTab: (serviceId?: string): void => ipcRenderer.send('create-tab', serviceId),
+  switchTab: (tabId: string): void => ipcRenderer.send('switch-tab', tabId),
+  closeTab: (tabId: string): void => ipcRenderer.send('close-tab', tabId),
+  openServiceInTab: (serviceId: string, openInNewTab?: boolean): void => ipcRenderer.send('open-service-in-tab', serviceId, openInNewTab),
+  onTabsUpdated: (callback: (data: { tabs: any[]; activeTabId: string | null }) => void) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('tabs-updated', handler);
+    return () => ipcRenderer.removeListener('tabs-updated', handler);
+  },
+
   onServiceLoadingStart: (callback: () => void) => {
     const handler = () => callback();
     ipcRenderer.on('service-loading-start', handler);

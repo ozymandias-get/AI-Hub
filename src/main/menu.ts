@@ -7,7 +7,7 @@ import {
   zoomOut,
   zoomReset,
   getCurrentServiceId,
-  switchToService,
+  openServiceInTab,
   showHomepage,
 } from './service-view';
 import { SERVICE_CATEGORIES, getServiceById } from './services';
@@ -26,7 +26,7 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
     for (const svc of cat.services) {
       servislerSubmenu.push({
         label: svc.name,
-        click: () => switchToService(svc.id, win, settings),
+        click: () => openServiceInTab(svc.id, win, settings),
       });
     }
     servislerSubmenu.push({ type: 'separator' });

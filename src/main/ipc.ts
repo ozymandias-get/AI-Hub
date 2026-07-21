@@ -1,5 +1,18 @@
 import { ipcMain, shell, BrowserWindow } from 'electron';
-import { getCurrentView, getCurrentServiceId, loadServiceURL, switchToService, showHomepage, goBack, setLanguage } from './service-view';
+import {
+  getCurrentView,
+  getCurrentServiceId,
+  loadServiceURL,
+  showHomepage,
+  goBack,
+  setLanguage,
+  createTab,
+  switchTab,
+  closeTab,
+  getTabsInfo,
+  getActiveTabId,
+  openServiceInTab,
+} from './service-view';
 import { SERVICE_CATEGORIES, getServiceById } from './services';
 
 import type { SettingsStore } from './settings-store';
@@ -78,6 +91,45 @@ export function registerIpcHandlers(): void {
     return false;
   });
 
+  // Multi-Tab IPC Handlers
+  ipcMain.handle('get-tabs-state', (event) => {
+    if (!isSenderTrusted(event.sender)) {
+      throw new Error('Unauthorized');
+    }
+    return {
+      tabs: getTabsInfo(),
+      activeTabId: getActiveTabId(),
+    };
+  });
+
+  ipcMain.on('create-tab', (event, serviceId?: string) => {
+    if (!isSenderTrusted(event.sender)) return;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || !settingsRef) return;
+    createTab(serviceId, win, settingsRef);
+  });
+
+  ipcMain.on('switch-tab', (event, tabId: string) => {
+    if (!isSenderTrusted(event.sender)) return;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || !settingsRef) return;
+    switchTab(tabId, win, settingsRef);
+  });
+
+  ipcMain.on('close-tab', (event, tabId: string) => {
+    if (!isSenderTrusted(event.sender)) return;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || !settingsRef) return;
+    closeTab(tabId, win, settingsRef);
+  });
+
+  ipcMain.on('open-service-in-tab', (event, serviceId: string, openInNewTab?: boolean) => {
+    if (!isSenderTrusted(event.sender)) return;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || !settingsRef) return;
+    openServiceInTab(serviceId, win, settingsRef, openInNewTab);
+  });
+
   ipcMain.on('retry-load', (event) => {
     if (!isSenderTrusted(event.sender)) return;
     const view = getCurrentView();
@@ -94,7 +146,7 @@ export function registerIpcHandlers(): void {
     if (!isSenderTrusted(event.sender)) return;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || !settingsRef) return;
-    switchToService(serviceId, win, settingsRef);
+    openServiceInTab(serviceId, win, settingsRef, false);
   });
 
   ipcMain.on('show-homepage', (event) => {

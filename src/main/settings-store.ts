@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     y: undefined,
     isMaximized: false,
     zoomLevel: DEFAULT_ZOOM_LEVEL,
-    lastService: 'chatgpt',
+    lastService: '',
   },
   minimizeToTray: false,
   globalShortcut: 'Alt+Space',
