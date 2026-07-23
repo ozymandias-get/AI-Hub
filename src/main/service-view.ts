@@ -182,6 +182,8 @@ export function createTab(
       sandbox: true,
       webSecurity: true,
       backgroundThrottling: true,
+      v8CacheOptions: 'bypassHeatCheck',
+      spellcheck: false,
       partition: `persist:service-${service.id}`,
     },
   });
@@ -211,6 +213,19 @@ export function createTab(
         targetWin.webContents.send('service-loading-start');
       }
       notifyTabsUpdated(targetWin);
+    }
+  });
+
+  view.webContents.on('dom-ready', () => {
+    newTab.isLoaded = true;
+    if (targetWin && !targetWin.isDestroyed() && activeTabId === tabId) {
+      if (!newTab.viewAttached || !targetWin.contentView.children.includes(view)) {
+        targetWin.contentView.addChildView(view);
+        resizeViewToWindow(targetWin);
+        newTab.viewAttached = true;
+        view.webContents.focus();
+      }
+      targetWin.webContents.send('service-loading-stop');
     }
   });
 
@@ -338,6 +353,7 @@ export function closeTab(tabId: string, win: BrowserWindow, settings?: SettingsS
     } catch (err) {
       console.warn('[ServiceView] Failed to close webContents:', err);
     }
+    tabToClose.view = null;
   }
 
   tabs.splice(index, 1);
@@ -371,6 +387,8 @@ export function openServiceInTab(
         sandbox: true,
         webSecurity: true,
         backgroundThrottling: true,
+        v8CacheOptions: 'bypassHeatCheck',
+        spellcheck: false,
         partition: `persist:service-${service.id}`,
       },
     });
@@ -397,6 +415,19 @@ export function openServiceInTab(
           win.webContents.send('service-loading-start');
         }
         notifyTabsUpdated(win);
+      }
+    });
+
+    view.webContents.on('dom-ready', () => {
+      active.isLoaded = true;
+      if (!win.isDestroyed() && activeTabId === active.id) {
+        if (!active.viewAttached || !win.contentView.children.includes(view)) {
+          win.contentView.addChildView(view);
+          resizeViewToWindow(win);
+          active.viewAttached = true;
+          view.webContents.focus();
+        }
+        win.webContents.send('service-loading-stop');
       }
     });
 

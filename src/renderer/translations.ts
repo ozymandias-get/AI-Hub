@@ -24,6 +24,11 @@ export const translations: TransMap = {
   'settings.language.title': { tr: 'Uygulama Dili', en: 'App Language' },
   'settings.language.desc': { tr: 'Arayüz dilini değiştirin. Servisler destekliyorsa seçtiğiniz dilde açılır.', en: 'Change the interface language. Services will open in your language if supported.' },
 
+  'settings.autolaunch.title': { tr: 'Bilgisayar Açılışında Başlat', en: 'Start on System Startup' },
+  'settings.autolaunch.desc': { tr: 'Bilgisayarınız açıldığında uygulamanın otomatik olarak başlamasını sağlayın.', en: 'Automatically launch the app when your computer starts.' },
+  'settings.autolaunch.enabled': { tr: 'Açık', en: 'On' },
+  'settings.autolaunch.disabled': { tr: 'Kapalı (Devre Dışı)', en: 'Off (Disabled)' },
+
   'category.all': { tr: 'Tümü', en: 'All' },
   'category.favorites': { tr: 'Favoriler', en: 'Favorites' },
   'category.chat': { tr: 'Sohbet', en: 'Chat' },

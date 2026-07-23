@@ -31,6 +31,8 @@ export interface AiDesktopAPI {
   openExternal(url: string): void;
   getGlobalShortcut(): Promise<string>;
   setGlobalShortcut(shortcut: string): void;
+  getAutoLaunch(): Promise<boolean>;
+  setAutoLaunch(enabled: boolean): void;
   getLanguage(): Promise<string>;
   setLanguage(language: string): void;
   getTabsState(): Promise<TabsState>;

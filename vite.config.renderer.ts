@@ -7,5 +7,10 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,
+    target: 'es2022',
+    minify: 'esbuild',
+    cssMinify: true,
+    modulePreload: false,
+    reportCompressedSize: false,
   },
 });

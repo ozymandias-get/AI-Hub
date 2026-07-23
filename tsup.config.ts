@@ -10,7 +10,7 @@ export default defineConfig([
     external: ['electron'],
     sourcemap: false,
     minify: true,
-    treeshake: false,
+    treeshake: true,
   },
   {
     entry: { preload: 'src/preload/preload.ts' },
@@ -21,6 +21,6 @@ export default defineConfig([
     external: ['electron'],
     sourcemap: false,
     minify: true,
-    treeshake: false,
+    treeshake: true,
   },
 ]);

@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('aiDesktop', {
   openExternal: (url: string): void => ipcRenderer.send('open-external', url),
   getGlobalShortcut: (): Promise<string> => ipcRenderer.invoke('get-global-shortcut'),
   setGlobalShortcut: (shortcut: string): void => ipcRenderer.send('set-global-shortcut', shortcut),
+  getAutoLaunch: (): Promise<boolean> => ipcRenderer.invoke('get-auto-launch'),
+  setAutoLaunch: (enabled: boolean): void => ipcRenderer.send('set-auto-launch', enabled),
   
   // Tab Management API
   getTabsState: (): Promise<{ tabs: any[]; activeTabId: string | null }> => ipcRenderer.invoke('get-tabs-state'),

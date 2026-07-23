@@ -17,6 +17,7 @@ import { SERVICE_CATEGORIES, getServiceById } from './services';
 
 import type { SettingsStore } from './settings-store';
 import { getMainWindow } from './window-manager';
+import { applyAutoLaunch } from './main';
 
 let ipcRegistered = false;
 let settingsRef: SettingsStore | null = null;
@@ -203,6 +204,23 @@ export function registerIpcHandlers(): void {
       if (win) {
         win.emit('update-global-shortcut', shortcut);
       }
+    }
+  });
+
+  ipcMain.handle('get-auto-launch', (event) => {
+    if (!isSenderTrusted(event.sender)) {
+      throw new Error('Unauthorized');
+    }
+    return settingsRef?.get('autoLaunch') ?? false;
+  });
+
+  ipcMain.on('set-auto-launch', (event, enabled: boolean) => {
+    if (!isSenderTrusted(event.sender)) return;
+    if (typeof enabled !== 'boolean') return;
+    if (settingsRef) {
+      settingsRef.set('autoLaunch', enabled);
+      settingsRef.save();
+      applyAutoLaunch(enabled);
     }
   });
 }

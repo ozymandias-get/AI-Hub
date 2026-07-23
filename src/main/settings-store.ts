@@ -26,6 +26,7 @@ export interface AppSettings {
   minimizeToTray: boolean;
   globalShortcut: string;
   language: 'tr' | 'en';
+  autoLaunch: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   minimizeToTray: false,
   globalShortcut: 'Alt+Space',
   language: 'tr',
+  autoLaunch: false,
 };
 
 function clampZoom(factor: number): number {
@@ -68,20 +70,21 @@ export class SettingsStore {
 
   private load(): AppSettings {
     try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, 'utf-8');
-        const parsed = JSON.parse(raw) as Partial<AppSettings>;
-        const window = { ...DEFAULT_SETTINGS.window, ...parsed.window };
-        window.zoomLevel = clampZoom(window.zoomLevel);
-        return {
-          window,
-          minimizeToTray: parsed.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
-          globalShortcut: parsed.globalShortcut ?? DEFAULT_SETTINGS.globalShortcut,
-          language: (parsed.language === 'tr' || parsed.language === 'en') ? parsed.language : DEFAULT_SETTINGS.language,
-        };
+      const raw = fs.readFileSync(this.filePath, 'utf-8');
+      const parsed = JSON.parse(raw) as Partial<AppSettings>;
+      const window = { ...DEFAULT_SETTINGS.window, ...parsed.window };
+      window.zoomLevel = clampZoom(window.zoomLevel);
+      return {
+        window,
+        minimizeToTray: parsed.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
+        globalShortcut: parsed.globalShortcut ?? DEFAULT_SETTINGS.globalShortcut,
+        language: (parsed.language === 'tr' || parsed.language === 'en') ? parsed.language : DEFAULT_SETTINGS.language,
+        autoLaunch: parsed.autoLaunch ?? DEFAULT_SETTINGS.autoLaunch,
+      };
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') {
+        console.warn('[SettingsStore] Settings file corrupted or unreadable, resetting to defaults:', err);
       }
-    } catch (err) {
-      console.warn('[SettingsStore] Settings file corrupted, resetting to defaults:', err);
     }
     return { ...DEFAULT_SETTINGS, window: { ...DEFAULT_SETTINGS.window } };
   }
@@ -90,9 +93,7 @@ export class SettingsStore {
     try {
       const filePath = this.filePath;
       const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) {
-        await fs.promises.mkdir(dir, { recursive: true });
-      }
+      await fs.promises.mkdir(dir, { recursive: true });
       await fs.promises.writeFile(filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
     } catch (err) {
       console.error('[SettingsStore] Failed to save settings asynchronously:', err);
@@ -103,9 +104,7 @@ export class SettingsStore {
     try {
       const filePath = this.filePath;
       const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
+      fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
     } catch (err) {
       console.error('[SettingsStore] Failed to save settings synchronously:', err);

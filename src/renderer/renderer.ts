@@ -23,6 +23,7 @@ const categoriesBar = document.getElementById('categories-bar')!;
 const servicesGrid = document.getElementById('services-grid')!;
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const shortcutSelect = document.getElementById('shortcut-select') as HTMLSelectElement;
+const autolaunchSelect = document.getElementById('autolaunch-select') as HTMLSelectElement;
 const maximizeBtn = document.getElementById('maximize-btn')!;
 const languageSelect = document.getElementById('language-select') as HTMLSelectElement;
 const tabsList = document.getElementById('tabs-list')!;
@@ -50,6 +51,7 @@ interface TabInfo {
 }
 
 let categories: AIServiceCategory[] = [];
+let flatServices: (AIService & { nameLower: string })[] = [];
 let currentServiceId: string | null = null;
 let activeCategoryKey: string = 'all';
 let searchQuery: string = '';
@@ -146,6 +148,82 @@ window.addEventListener('DOMContentLoaded', async () => {
       card.style.setProperty('--x', `${clientX - rect.left}px`);
       card.style.setProperty('--y', `${clientY - rect.top}px`);
     });
+  }, { passive: true });
+
+  // Delegated event listener for servicesGrid clicks (card launch & favorite toggle)
+  servicesGrid.addEventListener('click', (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const favBtn = target.closest('.favorite-btn') as HTMLButtonElement | null;
+    if (favBtn) {
+      e.stopPropagation();
+      const serviceId = favBtn.dataset.id;
+      if (serviceId) toggleFavorite(serviceId, favBtn);
+      return;
+    }
+
+    const card = target.closest('.service-card') as HTMLElement | null;
+    if (card) {
+      const serviceId = card.dataset.id;
+      if (serviceId) {
+        const openInNewTab = e.ctrlKey || e.metaKey || e.button === 1;
+        launchService(serviceId, openInNewTab);
+      }
+    }
+  });
+
+  // Delegated auxclick for servicesGrid (middle-click open in new tab)
+  servicesGrid.addEventListener('auxclick', (e: MouseEvent) => {
+    if (e.button === 1) {
+      const target = e.target as HTMLElement;
+      const card = target.closest('.service-card') as HTMLElement | null;
+      if (card && card.dataset.id) {
+        e.preventDefault();
+        launchService(card.dataset.id, true);
+      }
+    }
+  });
+
+  // Delegated image loading error handler for servicesGrid
+  servicesGrid.addEventListener('error', (e: Event) => {
+    const target = e.target as HTMLElement;
+    if (target && target.tagName === 'IMG' && target.classList.contains('service-logo-img')) {
+      target.style.display = 'none';
+      const fallbackSpan = target.nextElementSibling as HTMLElement | null;
+      if (fallbackSpan) {
+        fallbackSpan.style.display = 'inline';
+      }
+    }
+  }, true);
+
+  // Delegated event listener for tabsList (tab switch & close)
+  tabsList.addEventListener('click', (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const closeBtn = target.closest('.tab-close-btn') as HTMLElement | null;
+    if (closeBtn) {
+      e.stopPropagation();
+      const tabId = closeBtn.dataset.tabId;
+      if (tabId) window.aiDesktop.closeTab(tabId);
+      return;
+    }
+
+    const tabEl = target.closest('.tab-item') as HTMLElement | null;
+    if (tabEl) {
+      const tabId = tabEl.dataset.tabId;
+      if (tabId) window.aiDesktop.switchTab(tabId);
+    }
+  });
+
+  // Delegated auxclick for tabsList (middle-click close tab)
+  tabsList.addEventListener('auxclick', (e: MouseEvent) => {
+    if (e.button === 1) {
+      const target = e.target as HTMLElement;
+      const tabEl = target.closest('.tab-item') as HTMLElement | null;
+      if (tabEl && tabEl.dataset.tabId) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.aiDesktop.closeTab(tabEl.dataset.tabId);
+      }
+    }
   });
 
   // Load favorites
@@ -161,6 +239,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Load data
   try {
     categories = await window.aiDesktop.getServices();
+    flatServices = categories.flatMap(c => c.services).map(s => ({
+      ...s,
+      nameLower: s.name.toLowerCase(),
+    }));
   } catch (err) {
     console.error('[Renderer] Failed to load services:', err);
   }
@@ -320,6 +402,22 @@ window.addEventListener('DOMContentLoaded', async () => {
       window.aiDesktop.setGlobalShortcut(shortcutSelect.value);
     });
   }
+
+  // Load and bind auto launch setting
+  try {
+    const isAutoLaunch = await window.aiDesktop.getAutoLaunch();
+    if (autolaunchSelect) {
+      autolaunchSelect.value = String(isAutoLaunch);
+    }
+  } catch (err) {
+    console.warn('Failed to load auto launch setting:', err);
+  }
+
+  if (autolaunchSelect) {
+    autolaunchSelect.addEventListener('change', () => {
+      window.aiDesktop.setAutoLaunch(autolaunchSelect.value === 'true');
+    });
+  }
 });
 
 function renderTabs(tabs: TabInfo[], activeTabId: string | null): void {
@@ -332,6 +430,7 @@ function renderTabs(tabs: TabInfo[], activeTabId: string | null): void {
     const tabEl = document.createElement('div');
     const isActive = tab.id === activeTabId;
     tabEl.className = `tab-item ${isActive ? 'active' : ''}`;
+    tabEl.dataset.tabId = tab.id;
 
     let iconHtml = '';
     if (tab.isHome) {
@@ -352,33 +451,10 @@ function renderTabs(tabs: TabInfo[], activeTabId: string | null): void {
     tabEl.innerHTML = `
       ${iconHtml}
       <span class="tab-title">${titleText}</span>
-      <button class="tab-close-btn" title="${t('titlebar.close')}">
+      <button class="tab-close-btn" data-tab-id="${tab.id}" title="${t('titlebar.close')}">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     `;
-
-    // Tab switch on click
-    tabEl.addEventListener('click', () => {
-      window.aiDesktop.switchTab(tab.id);
-    });
-
-    // Middle click to close tab
-    tabEl.addEventListener('auxclick', (e: MouseEvent) => {
-      if (e.button === 1) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.aiDesktop.closeTab(tab.id);
-      }
-    });
-
-    // Close button click
-    const closeBtn = tabEl.querySelector('.tab-close-btn') as HTMLButtonElement;
-    if (closeBtn) {
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.aiDesktop.closeTab(tab.id);
-      });
-    }
 
     fragment.appendChild(tabEl);
   }
@@ -415,11 +491,18 @@ function applyUILanguage(): void {
 
   document.getElementById('settings-shortcut-title')!.textContent = t('settings.shortcut.title');
   document.getElementById('settings-shortcut-desc')!.textContent = t('settings.shortcut.desc');
+  document.getElementById('settings-autolaunch-title')!.textContent = t('settings.autolaunch.title');
+  document.getElementById('settings-autolaunch-desc')!.textContent = t('settings.autolaunch.desc');
   document.getElementById('settings-language-title')!.textContent = t('settings.language.title');
   document.getElementById('settings-language-desc')!.textContent = t('settings.language.desc');
 
   const shortcutNone = shortcutSelect.querySelector('option[value="Yok"]') as HTMLOptionElement;
   if (shortcutNone) shortcutNone.textContent = t('settings.shortcut.none');
+
+  const autoLaunchEnabledOpt = document.getElementById('settings-autolaunch-opt-true') as HTMLOptionElement;
+  const autoLaunchDisabledOpt = document.getElementById('settings-autolaunch-opt-false') as HTMLOptionElement;
+  if (autoLaunchEnabledOpt) autoLaunchEnabledOpt.textContent = t('settings.autolaunch.enabled');
+  if (autoLaunchDisabledOpt) autoLaunchDisabledOpt.textContent = t('settings.autolaunch.disabled');
 
   document.getElementById('dashboard-title')!.textContent = t('dashboard.title');
   document.getElementById('dashboard-subtitle')!.textContent = t('dashboard.subtitle');
@@ -515,22 +598,21 @@ function selectCategory(categoryKey: string, tabElement: HTMLButtonElement): voi
 function renderServices(): void {
   servicesGrid.replaceChildren();
 
-  let allServices: AIService[] = [];
+  let candidateServices: (AIService & { nameLower: string })[] = [];
   if (activeCategoryKey === 'all') {
-    allServices = categories.flatMap(c => c.services);
+    candidateServices = flatServices;
   } else if (activeCategoryKey === 'favorites') {
-    allServices = categories.flatMap(c => c.services).filter(s => favorites.has(s.id));
+    candidateServices = flatServices.filter(s => favorites.has(s.id));
   } else {
-    const cat = categories.find(c => c.key === activeCategoryKey);
-    if (cat) {
-      allServices = cat.services;
-    }
+    candidateServices = flatServices.filter(s => s.category === activeCategoryKey);
   }
 
-  const filtered = allServices.filter(s => 
-    s.name.toLowerCase().includes(searchQuery) || 
-    (serviceDescriptionsLower[s.id] && serviceDescriptionsLower[s.id].includes(searchQuery))
-  );
+  const filtered = searchQuery
+    ? candidateServices.filter(s =>
+        s.nameLower.includes(searchQuery) ||
+        (serviceDescriptionsLower[s.id] && serviceDescriptionsLower[s.id].includes(searchQuery))
+      )
+    : candidateServices;
 
   if (filtered.length === 0) {
     const noResult = document.createElement('div');
@@ -554,25 +636,20 @@ function renderServices(): void {
   for (const svc of filtered) {
     const card = document.createElement('div');
     card.className = 'service-card';
+    card.dataset.id = svc.id;
 
     const categoryName = getCategoryName(svc.category);
     const description = getServiceDesc(svc.id) || t('service.defaultDesc').replace('{name}', svc.name);
     const letter = svc.name.charAt(0);
-
-    const hasLocalLogo = true;
     const iconUrl = `./logos/${svc.id}.png`;
-
     const isFavorite = favorites.has(svc.id);
 
     card.innerHTML = `
-      <button class="favorite-btn ${isFavorite ? 'active' : ''}" title="${isFavorite ? t('favorite.remove') : t('favorite.add')}">★</button>
+      <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-id="${svc.id}" title="${isFavorite ? t('favorite.remove') : t('favorite.add')}">★</button>
       <div class="card-header">
         <div class="service-icon">
-          ${hasLocalLogo 
-            ? `<img src="${iconUrl}" alt="" loading="lazy" style="width: 22px; height: 22px; object-fit: contain;">
-               <span style="display: none;">${letter}</span>`
-            : `<span style="display: inline;">${letter}</span>`
-          }
+          <img src="${iconUrl}" alt="" loading="lazy" class="service-logo-img" style="width: 22px; height: 22px; object-fit: contain;">
+          <span style="display: none;">${letter}</span>
         </div>
         <div class="service-name">${svc.name}</div>
       </div>
@@ -582,44 +659,6 @@ function renderServices(): void {
         <button class="launch-btn" title="${t('service.launch')}">➔</button>
       </div>
     `;
-
-    const imgElement = card.querySelector('img');
-    if (imgElement) {
-      imgElement.addEventListener('error', () => {
-        imgElement.style.display = 'none';
-        const fallbackSpan = imgElement.nextElementSibling as HTMLElement;
-        if (fallbackSpan) {
-          fallbackSpan.style.display = 'inline';
-        }
-      });
-      if (imgElement.complete && imgElement.naturalWidth === 0) {
-        imgElement.style.display = 'none';
-        const fallbackSpan = imgElement.nextElementSibling as HTMLElement;
-        if (fallbackSpan) {
-          fallbackSpan.style.display = 'inline';
-        }
-      }
-    }
-
-    const favBtn = card.querySelector('.favorite-btn') as HTMLButtonElement;
-    if (favBtn) {
-      favBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleFavorite(svc.id, favBtn);
-      });
-    }
-
-    card.addEventListener('click', (e: MouseEvent) => {
-      const openInNewTab = e.ctrlKey || e.metaKey || e.button === 1;
-      launchService(svc.id, openInNewTab);
-    });
-
-    card.addEventListener('auxclick', (e: MouseEvent) => {
-      if (e.button === 1) {
-        e.preventDefault();
-        launchService(svc.id, true);
-      }
-    });
 
     fragment.appendChild(card);
   }

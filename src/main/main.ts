@@ -28,11 +28,28 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
+// Enable GPU rasterization, zero-copy rendering and fast networking for AI web apps
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization,ParallelDownloading,TcpFastOpen');
+
 const settings = new SettingsStore();
 setSettingsStore(settings);
 setLanguage(settings.get('language'));
 
 let resizeTimer: NodeJS.Timeout | null = null;
+
+export function applyAutoLaunch(enabled: boolean): void {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: false,
+    });
+  } catch (err) {
+    console.warn('[App] Failed to update login item settings:', err);
+  }
+}
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -87,6 +104,7 @@ if (!gotSingleInstanceLock) {
     setupPermissions(session.defaultSession);
     setupDownloads(session.defaultSession);
     bootstrapWindow();
+    applyAutoLaunch(settings.get('autoLaunch'));
   });
 
   app.on('window-all-closed', () => {
