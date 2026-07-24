@@ -1,12 +1,14 @@
 import { WebContentsView, shell } from 'electron';
+import { getAllServices } from './services';
+import { Logger } from '../shared/utils/logger';
+
+const LOG_TAG = 'NavigationPolicy';
 
 /**
  * Protocols safe to open via shell.openExternal from a web context.
  * file: and unknown custom protocols are deliberately excluded.
  */
 const SAFE_EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:', 'tel:', 'sms:']);
-
-import { getAllServices } from './services';
 
 /** Exact hostnames and parent domains allowed inside the app view. */
 const STATIC_ALLOWED_HOSTS = [
@@ -104,7 +106,7 @@ export function setupNavigationPolicy(view: WebContentsView): void {
     try {
       const protocol = new URL(url).protocol;
       if (SAFE_EXTERNAL_PROTOCOLS.has(protocol)) {
-        shell.openExternal(url).catch((err) => console.warn('Failed to open external URL:', err));
+        shell.openExternal(url).catch((err) => Logger.warn(LOG_TAG, 'Failed to open external URL', { err }));
       }
     } catch {
       // Invalid URL — ignore entirely
@@ -118,7 +120,7 @@ export function setupNavigationPolicy(view: WebContentsView): void {
       try {
         const protocol = new URL(url).protocol;
         if (SAFE_EXTERNAL_PROTOCOLS.has(protocol)) {
-          shell.openExternal(url).catch((err) => console.warn('Failed to open external URL:', err));
+          shell.openExternal(url).catch((err) => Logger.warn(LOG_TAG, 'Failed to open external URL', { err }));
         }
       } catch {
         // Invalid URL — ignore entirely

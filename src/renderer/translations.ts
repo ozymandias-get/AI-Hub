@@ -6,9 +6,14 @@ export const translations: TransMap = {
   'app.title': { tr: 'AI Hub', en: 'AI Hub' },
   'titlebar.back': { tr: 'Geri', en: 'Back' },
   'titlebar.home': { tr: 'Ana Sayfa', en: 'Home' },
+  'titlebar.settings': { tr: 'Ayarlar', en: 'Settings' },
   'titlebar.minimize': { tr: 'Küçült', en: 'Minimize' },
   'titlebar.maximize': { tr: 'Büyüt', en: 'Maximize' },
   'titlebar.close': { tr: 'Kapat', en: 'Close' },
+  'titlebar.newTab': { tr: 'Yeni Sekme', en: 'New Tab' },
+
+  'download.completed': { tr: 'İndirme Tamamlandı', en: 'Download Completed' },
+  'download.error': { tr: 'İndirme Hatası', en: 'Download Error' },
 
   'dashboard.title': { tr: 'Yapay Zeka Dünyası', en: 'AI World' },
   'dashboard.subtitle': { tr: 'Tüm yapay zeka modelleri tek bir premium masaüstü uygulamasında.', en: 'All AI models in one premium desktop application.' },
@@ -16,6 +21,10 @@ export const translations: TransMap = {
 
   'auth.warning.title': { tr: 'Giriş Uyarısı', en: 'Login Warning' },
   'auth.warning.desc': { tr: 'Google veya Apple ile oturum açma işlemleri güvenlik kısıtlamaları nedeniyle çalışmamaktadır. Lütfen e-posta ve şifrenizle giriş yapınız.', en: 'Sign in with Google or Apple does not work due to security restrictions. Please sign in with your email and password.' },
+
+  'settings.page.title': { tr: 'Ayarlar', en: 'Settings' },
+  'settings.page.subtitle': { tr: 'Uygulama tercihlerinizi ve sistem ayarlarınızı buradan yönetebilirsiniz.', en: 'Manage your app preferences and system settings here.' },
+  'settings.page.badge': { tr: 'TERCİHLER & SİSTEM', en: 'PREFERENCES & SYSTEM' },
 
   'settings.shortcut.title': { tr: 'Hızlı Erişim Kısayolu', en: 'Global Shortcut' },
   'settings.shortcut.desc': { tr: 'Uygulamayı herhangi bir ekrandan anında açmak veya gizlemek için genel bir kısayol tuşu belirleyin.', en: 'Set a global hotkey to instantly show or hide the app from any screen.' },

@@ -1,16 +1,18 @@
 import { app, Notification, shell, dialog, Session } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { Logger } from '../shared/utils/logger';
 
+const LOG_TAG = 'DownloadsManager';
 const configuredSessions = new WeakSet<Session>();
 
-export function setupDownloads(ses: Session): void {
-  if (configuredSessions.has(ses)) {
+export function setupDownloads(electronSession: Session): void {
+  if (configuredSessions.has(electronSession)) {
     return;
   }
-  configuredSessions.add(ses);
+  configuredSessions.add(electronSession);
 
-  ses.on('will-download', (_event, item) => {
+  electronSession.on('will-download', (_event, item) => {
     const downloadsPath = app.getPath('downloads');
     let filename = item.getFilename();
 
@@ -40,15 +42,16 @@ export function setupDownloads(ses: Session): void {
 
     item.on('done', (_doneEvent, state) => {
       if (state === 'completed') {
-        const notif = new Notification({
+        const notification = new Notification({
           title: 'İndirme Tamamlandı',
           body: displayFilename,
         });
-        notif.on('click', () => {
+        notification.on('click', () => {
           shell.showItemInFolder(filePath);
         });
-        notif.show();
+        notification.show();
       } else if (state === 'interrupted') {
+        Logger.error(LOG_TAG, `Download interrupted for file: ${displayFilename}`);
         dialog.showErrorBox(
           'İndirme Hatası',
           `"${displayFilename}" indirilirken bir hata oluştu.`
@@ -57,4 +60,3 @@ export function setupDownloads(ses: Session): void {
     });
   });
 }
-

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, Menu, session, globalShortcut } from 'electron';
+import { app, BrowserWindow, Menu, session, globalShortcut } from 'electron';
 import * as path from 'path';
 import { SettingsStore } from './settings-store';
 import { createMainWindow, getMainWindow, ensureWindowVisible } from './window-manager';
@@ -10,7 +10,6 @@ import {
   restoreZoomLevel,
   resizeViewToWindow,
   createTab,
-  showHomepage,
   suspendActiveService,
   resumeActiveService,
 } from './service-view';
@@ -19,9 +18,12 @@ import { setupTray, destroyTray } from './tray';
 import { registerIpcHandlers, setIpcSettings } from './ipc';
 import { setQuitting, getIsQuitting } from './app-state';
 import { RESIZE_DEBOUNCE_MS, APP_USER_MODEL_ID } from './constants';
+import { Logger } from '../shared/utils/logger';
+
+const LOG_TAG = 'MainProcess';
 
 process.on('unhandledRejection', (reason) => {
-  console.warn('[App] Unhandled rejection:', reason);
+  Logger.warn(LOG_TAG, 'Unhandled promise rejection', { reason });
 });
 
 if (process.platform === 'win32') {
@@ -46,8 +48,8 @@ export function applyAutoLaunch(enabled: boolean): void {
       openAtLogin: enabled,
       openAsHidden: false,
     });
-  } catch (err) {
-    console.warn('[App] Failed to update login item settings:', err);
+  } catch (error) {
+    Logger.warn(LOG_TAG, 'Failed to update login item settings', { error });
   }
 }
 
@@ -56,45 +58,30 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('web-contents-created', (event, contents) => {
-    (contents as any).on('will-attach-web-contents', (e: any, webPreferences: any) => {
-      if (webPreferences.preload && !webPreferences.preload.includes('preload.js')) {
-        webPreferences.preload = undefined;
-      }
-      webPreferences.nodeIntegration = false;
-      webPreferences.contextIsolation = true;
-      webPreferences.sandbox = true;
-      webPreferences.webSecurity = true;
-    });
-
-    contents.on('context-menu', (e, params) => {
-      const lang = settings.get('language');
-      const isTR = lang === 'tr';
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('context-menu', (_e, params) => {
+      const currentLang = settings.get('language');
+      const isTurkish = currentLang === 'tr';
       const menu = Menu.buildFromTemplate([
-        { label: isTR ? 'Geri Al' : 'Undo', role: 'undo', enabled: params.editFlags.canUndo },
-        { label: isTR ? 'Yinele' : 'Redo', role: 'redo', enabled: params.editFlags.canRedo },
+        { label: isTurkish ? 'Geri Al' : 'Undo', role: 'undo', enabled: params.editFlags.canUndo },
+        { label: isTurkish ? 'Yinele' : 'Redo', role: 'redo', enabled: params.editFlags.canRedo },
         { type: 'separator' },
-        { label: isTR ? 'Kes' : 'Cut', role: 'cut', enabled: params.editFlags.canCut },
-        { label: isTR ? 'Kopyala' : 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
-        { label: isTR ? 'Yapıştır' : 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
+        { label: isTurkish ? 'Kes' : 'Cut', role: 'cut', enabled: params.editFlags.canCut },
+        { label: isTurkish ? 'Kopyala' : 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
+        { label: isTurkish ? 'Yapıştır' : 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
         { type: 'separator' },
-        { label: isTR ? 'Tümünü Seç' : 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll }
+        { label: isTurkish ? 'Tümünü Seç' : 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll },
       ]);
       menu.popup();
     });
   });
 
-  app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
-    event.preventDefault();
-    callback(true);
-  });
-
   app.on('second-instance', () => {
-    const win = getMainWindow();
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.show();
-      win.focus();
+    const mainWindow = getMainWindow();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
     }
   });
 
@@ -118,10 +105,10 @@ if (!gotSingleInstanceLock) {
     if (BrowserWindow.getAllWindows().length === 0) {
       bootstrapWindow();
     } else {
-      const win = getMainWindow();
-      if (win) {
-        win.show();
-        win.focus();
+      const mainWindow = getMainWindow();
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
       }
     }
   });
@@ -135,13 +122,17 @@ if (!gotSingleInstanceLock) {
 
 function isLaunchedInBackground(): boolean {
   const args = process.argv;
-  const isHiddenArg = args.includes('--hidden') || args.includes('--background') || args.includes('-b') || args.includes('/background');
-  
+  const isHiddenArg =
+    args.includes('--hidden') ||
+    args.includes('--background') ||
+    args.includes('-b') ||
+    args.includes('/background');
+
   let wasOpenedAsHidden = false;
   try {
     wasOpenedAsHidden = app.getLoginItemSettings().wasOpenedAsHidden;
-  } catch (err) {
-    // Ignore error
+  } catch (error) {
+    Logger.debug(LOG_TAG, 'Failed to read wasOpenedAsHidden setting', { error });
   }
 
   return isHiddenArg || wasOpenedAsHidden;
@@ -153,101 +144,84 @@ function bootstrapWindow(): void {
     resizeTimer = null;
   }
 
-  const isBg = isLaunchedInBackground();
-  const win = createMainWindow(settings, !isBg);
+  const isBackground = isLaunchedInBackground();
+  const mainWindow = createMainWindow(settings, !isBackground);
   ensureWindowVisible();
 
-  // Forward renderer console errors/warnings only
   if (!app.isPackaged) {
-    win.webContents.on('console-message', (event: any, ...args: any[]) => {
-      let level = 0;
-      let message = '';
-      let line = 0;
-      let sourceId = '';
-
-      if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
-        level = args[0].level ?? 0;
-        message = args[0].message ?? '';
-        line = args[0].line ?? 0;
-        sourceId = args[0].sourceId ?? '';
-      } else {
-        [level, message, line, sourceId] = args;
-      }
-
-      // Filter: Only log warnings (level 2) and errors (level 3)
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       if (level >= 2) {
-        console.error(`[Renderer Error] [Level ${level}] ${message} (at ${sourceId}:${line})`);
+        Logger.error('RendererConsole', `Console error [Level ${level}]: ${message} (at ${sourceId}:${line})`);
       }
     });
   }
 
-  win.loadFile(path.join(__dirname, '../renderer/index.html')).catch((err) => {
-    console.warn('[App] Failed to load renderer HTML:', err);
+  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html')).catch((error) => {
+    Logger.warn(LOG_TAG, 'Failed to load renderer HTML', { error });
   });
 
-  // Register window lifecycle listeners for background resource optimization
-  win.on('hide', () => {
+  mainWindow.on('hide', () => {
     suspendActiveService();
   });
 
-  win.on('minimize', () => {
+  mainWindow.on('minimize', () => {
     suspendActiveService();
   });
 
-  win.on('show', () => {
-    resumeActiveService(win, settings);
+  mainWindow.on('show', () => {
+    resumeActiveService(mainWindow, settings);
   });
 
-  win.on('restore', () => {
-    resumeActiveService(win, settings);
+  mainWindow.on('restore', () => {
+    resumeActiveService(mainWindow, settings);
   });
 
-  // Initial load logic: Always open on Home Page
-  if (!isBg) {
-    createTab(undefined, win, settings);
+  if (!isBackground) {
+    createTab(undefined, mainWindow, settings);
   }
 
-  setupMenu(win, settings);
+  setupMenu(mainWindow, settings);
   restoreZoomLevel();
   setupTray(settings);
 
-  // Register global hotkey
   const initialShortcut = settings.get('globalShortcut') || 'Alt+Space';
-  registerGlobalHotkey(initialShortcut, win);
+  registerGlobalHotkey(initialShortcut, mainWindow);
 
-  (win as any).on('update-global-shortcut', (newShortcut: string) => {
-    registerGlobalHotkey(newShortcut, win);
+  (mainWindow as unknown as import('events').EventEmitter).on('update-global-shortcut', (newShortcut: unknown) => {
+    if (typeof newShortcut === 'string') {
+      registerGlobalHotkey(newShortcut, mainWindow);
+    }
   });
 
-  win.on('close', (event) => {
+  mainWindow.on('close', (event) => {
     if (resizeTimer) {
       clearTimeout(resizeTimer);
       resizeTimer = null;
     }
-    saveWindowState(win);
+    saveWindowState(mainWindow);
     if (!getIsQuitting()) {
       event.preventDefault();
-      win.hide();
+      mainWindow.hide();
     }
   });
 
-  win.on('resize', () => {
+  mainWindow.on('resize', () => {
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      if (!win.isDestroyed()) {
-        resizeViewToWindow(win);
+      if (!mainWindow.isDestroyed()) {
+        resizeViewToWindow(mainWindow);
       }
     }, RESIZE_DEBOUNCE_MS);
   });
 
-  win.on('maximize', () => updateMaximizeButton(win));
-  win.on('unmaximize', () => updateMaximizeButton(win));
+  mainWindow.on('maximize', () => updateMaximizeButton(mainWindow));
+  mainWindow.on('unmaximize', () => updateMaximizeButton(mainWindow));
 }
 
-function saveWindowState(win: BrowserWindow): void {
-  const maximized = win.isMaximized();
-  if (!maximized) {
-    const bounds = win.getBounds();
+function saveWindowState(mainWindow: BrowserWindow): void {
+  const isMaximized = mainWindow.isMaximized();
+  if (!isMaximized) {
+    const bounds = mainWindow.getBounds();
     settings.setWindow({
       width: bounds.width,
       height: bounds.height,
@@ -255,16 +229,16 @@ function saveWindowState(win: BrowserWindow): void {
       y: bounds.y,
     });
   }
-  settings.setWindow({ isMaximized: maximized });
+  settings.setWindow({ isMaximized });
   settings.saveSync();
 }
 
-function updateMaximizeButton(win: BrowserWindow): void {
-  if (win.isDestroyed()) return;
-  win.webContents.send('maximize-state', win.isMaximized());
+function updateMaximizeButton(mainWindow: BrowserWindow): void {
+  if (mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('maximize-state', mainWindow.isMaximized());
 }
 
-function registerGlobalHotkey(shortcut: string, win: BrowserWindow): void {
+function registerGlobalHotkey(shortcut: string, mainWindow: BrowserWindow): void {
   globalShortcut.unregisterAll();
 
   if (!shortcut || shortcut === 'Yok' || shortcut === 'None') {
@@ -273,20 +247,20 @@ function registerGlobalHotkey(shortcut: string, win: BrowserWindow): void {
 
   try {
     const isRegistered = globalShortcut.register(shortcut, () => {
-      if (win.isDestroyed()) return;
-      if (win.isVisible() && win.isFocused() && !win.isMinimized()) {
-        win.hide();
+      if (mainWindow.isDestroyed()) return;
+      if (mainWindow.isVisible() && mainWindow.isFocused() && !mainWindow.isMinimized()) {
+        mainWindow.hide();
       } else {
-        if (win.isMinimized()) win.restore();
-        win.show();
-        win.focus();
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
       }
     });
 
     if (!isRegistered) {
-      console.warn(`[App] Failed to register global hotkey: ${shortcut}`);
+      Logger.warn(LOG_TAG, `Failed to register global hotkey: ${shortcut}`);
     }
-  } catch (err) {
-    console.error(`[App] Error registering global hotkey ${shortcut}:`, err);
+  } catch (error) {
+    Logger.error(LOG_TAG, `Error registering global hotkey ${shortcut}`, error);
   }
 }

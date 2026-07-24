@@ -1,59 +1,62 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { IPC_CHANNELS } from '../shared/constants/ipc';
+import type { AIServiceCategory, TabsState, ServiceUIInfo, Language } from '../shared/types';
 
 contextBridge.exposeInMainWorld('aiDesktop', {
-  getLanguage: (): Promise<string> => ipcRenderer.invoke('get-language'),
-  setLanguage: (language: string): void => ipcRenderer.send('set-language', language),
-  getServices: (): Promise<any[]> => ipcRenderer.invoke('get-services'),
-  getCurrentServiceId: (): Promise<string> => ipcRenderer.invoke('get-current-service-id'),
-  isServiceLoading: (): Promise<boolean> => ipcRenderer.invoke('is-service-loading'),
-  showHomepage: (): void => ipcRenderer.send('show-homepage'),
-  goBack: (): void => ipcRenderer.send('go-back'),
-  minimize: (): void => ipcRenderer.send('window-minimize'),
-  maximize: (): void => ipcRenderer.send('window-maximize'),
-  close: (): void => ipcRenderer.send('window-close'),
-  selectService: (id: string): void => ipcRenderer.send('service-select', id),
-  retryLoad: (): void => ipcRenderer.send('retry-load'),
-  openExternal: (url: string): void => ipcRenderer.send('open-external', url),
-  getGlobalShortcut: (): Promise<string> => ipcRenderer.invoke('get-global-shortcut'),
-  setGlobalShortcut: (shortcut: string): void => ipcRenderer.send('set-global-shortcut', shortcut),
-  getAutoLaunch: (): Promise<boolean> => ipcRenderer.invoke('get-auto-launch'),
-  setAutoLaunch: (enabled: boolean): void => ipcRenderer.send('set-auto-launch', enabled),
-  
-  // Tab Management API
-  getTabsState: (): Promise<{ tabs: any[]; activeTabId: string | null }> => ipcRenderer.invoke('get-tabs-state'),
-  createTab: (serviceId?: string): void => ipcRenderer.send('create-tab', serviceId),
-  switchTab: (tabId: string): void => ipcRenderer.send('switch-tab', tabId),
-  closeTab: (tabId: string): void => ipcRenderer.send('close-tab', tabId),
-  openServiceInTab: (serviceId: string, openInNewTab?: boolean): void => ipcRenderer.send('open-service-in-tab', serviceId, openInNewTab),
-  onTabsUpdated: (callback: (data: { tabs: any[]; activeTabId: string | null }) => void) => {
-    const handler = (_: any, data: any) => callback(data);
-    ipcRenderer.on('tabs-updated', handler);
-    return () => ipcRenderer.removeListener('tabs-updated', handler);
+  getLanguage: (): Promise<Language> => ipcRenderer.invoke(IPC_CHANNELS.GET_LANGUAGE),
+  setLanguage: (language: Language): void => ipcRenderer.send(IPC_CHANNELS.SET_LANGUAGE, language),
+  getServices: (): Promise<AIServiceCategory[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_SERVICES),
+  getCurrentServiceId: (): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.GET_CURRENT_SERVICE_ID),
+  isServiceLoading: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.IS_SERVICE_LOADING),
+  showHomepage: (): void => ipcRenderer.send(IPC_CHANNELS.SHOW_HOMEPAGE),
+  goBack: (): void => ipcRenderer.send(IPC_CHANNELS.GO_BACK),
+  minimize: (): void => ipcRenderer.send(IPC_CHANNELS.WINDOW_MINIMIZE),
+  maximize: (): void => ipcRenderer.send(IPC_CHANNELS.WINDOW_MAXIMIZE),
+  close: (): void => ipcRenderer.send(IPC_CHANNELS.WINDOW_CLOSE),
+  selectService: (id: string): void => ipcRenderer.send(IPC_CHANNELS.SERVICE_SELECT, id),
+  retryLoad: (): void => ipcRenderer.send(IPC_CHANNELS.RETRY_LOAD),
+  openExternal: (url: string): void => ipcRenderer.send(IPC_CHANNELS.OPEN_EXTERNAL, url),
+  getGlobalShortcut: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.GET_GLOBAL_SHORTCUT),
+  setGlobalShortcut: (shortcut: string): void => ipcRenderer.send(IPC_CHANNELS.SET_GLOBAL_SHORTCUT, shortcut),
+  getAutoLaunch: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.GET_AUTO_LAUNCH),
+  setAutoLaunch: (enabled: boolean): void => ipcRenderer.send(IPC_CHANNELS.SET_AUTO_LAUNCH, enabled),
+
+  // Multi-Tab Management API
+  getTabsState: (): Promise<TabsState> => ipcRenderer.invoke(IPC_CHANNELS.GET_TABS_STATE),
+  createTab: (serviceId?: string): void => ipcRenderer.send(IPC_CHANNELS.CREATE_TAB, serviceId),
+  switchTab: (tabId: string): void => ipcRenderer.send(IPC_CHANNELS.SWITCH_TAB, tabId),
+  closeTab: (tabId: string): void => ipcRenderer.send(IPC_CHANNELS.CLOSE_TAB, tabId),
+  openServiceInTab: (serviceId: string, openInNewTab?: boolean): void => ipcRenderer.send(IPC_CHANNELS.OPEN_SERVICE_IN_TAB, serviceId, openInNewTab),
+
+  onTabsUpdated: (callback: (data: TabsState) => void) => {
+    const handler = (_: IpcRendererEvent, data: TabsState) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.TABS_UPDATED, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.TABS_UPDATED, handler);
   },
 
   onServiceLoadingStart: (callback: () => void) => {
     const handler = () => callback();
-    ipcRenderer.on('service-loading-start', handler);
-    return () => ipcRenderer.removeListener('service-loading-start', handler);
+    ipcRenderer.on(IPC_CHANNELS.SERVICE_LOADING_START, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SERVICE_LOADING_START, handler);
   },
   onServiceLoadingStop: (callback: () => void) => {
     const handler = () => callback();
-    ipcRenderer.on('service-loading-stop', handler);
-    return () => ipcRenderer.removeListener('service-loading-stop', handler);
+    ipcRenderer.on(IPC_CHANNELS.SERVICE_LOADING_STOP, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SERVICE_LOADING_STOP, handler);
   },
   onServiceLoadingError: (callback: (errorDescription: string) => void) => {
-    const handler = (_: any, desc: string) => callback(desc);
-    ipcRenderer.on('service-loading-error', handler);
-    return () => ipcRenderer.removeListener('service-loading-error', handler);
+    const handler = (_: IpcRendererEvent, desc: string) => callback(desc);
+    ipcRenderer.on(IPC_CHANNELS.SERVICE_LOADING_ERROR, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SERVICE_LOADING_ERROR, handler);
   },
-  onUpdateServiceUI: (callback: (info: any) => void) => {
-    const handler = (_: any, info: any) => callback(info);
-    ipcRenderer.on('update-service-ui', handler);
-    return () => ipcRenderer.removeListener('update-service-ui', handler);
+  onUpdateServiceUI: (callback: (info: ServiceUIInfo) => void) => {
+    const handler = (_: IpcRendererEvent, info: ServiceUIInfo) => callback(info);
+    ipcRenderer.on(IPC_CHANNELS.UPDATE_SERVICE_UI, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_SERVICE_UI, handler);
   },
   onMaximizeState: (callback: (isMaximized: boolean) => void) => {
-    const handler = (_: any, isMaximized: boolean) => callback(isMaximized);
-    ipcRenderer.on('maximize-state', handler);
-    return () => ipcRenderer.removeListener('maximize-state', handler);
+    const handler = (_: IpcRendererEvent, isMaximized: boolean) => callback(isMaximized);
+    ipcRenderer.on(IPC_CHANNELS.MAXIMIZE_STATE, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MAXIMIZE_STATE, handler);
   },
 });

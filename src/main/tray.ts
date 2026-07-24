@@ -4,7 +4,9 @@ import { setQuitting } from './app-state';
 import { showHomepage } from './service-view';
 import type { SettingsStore } from './settings-store';
 import * as path from 'path';
+import { Logger } from '../shared/utils/logger';
 
+const LOG_TAG = 'Tray';
 let tray: Tray | null = null;
 let settingsRef: SettingsStore | null = null;
 
@@ -22,7 +24,8 @@ export function setupTray(settings?: SettingsStore): void {
     if (icon.isEmpty()) {
       icon = nativeImage.createEmpty();
     }
-  } catch {
+  } catch (err) {
+    Logger.warn(LOG_TAG, 'Failed to load tray icon asset', { err });
     icon = nativeImage.createEmpty();
   }
 
@@ -72,7 +75,6 @@ export function setupTray(settings?: SettingsStore): void {
       win.focus();
     }
   });
-  // Removed redundant double-click handler — click already handles show/focus
 }
 
 export function destroyTray(): void {

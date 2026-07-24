@@ -1,21 +1,23 @@
+import { APP_CONSTANTS } from '../shared/constants/app';
+
 export const CHATGPT_URL = 'https://chatgpt.com';
 
-export const MIN_WINDOW_WIDTH = 900;
-export const MIN_WINDOW_HEIGHT = 600;
-export const DEFAULT_WINDOW_WIDTH = 1280;
-export const DEFAULT_WINDOW_HEIGHT = 850;
+export const MIN_WINDOW_WIDTH = APP_CONSTANTS.WINDOW.MIN_WIDTH;
+export const MIN_WINDOW_HEIGHT = APP_CONSTANTS.WINDOW.MIN_HEIGHT;
+export const DEFAULT_WINDOW_WIDTH = APP_CONSTANTS.WINDOW.DEFAULT_WIDTH;
+export const DEFAULT_WINDOW_HEIGHT = APP_CONSTANTS.WINDOW.DEFAULT_HEIGHT;
 
 /** Zoom factor bounds (1.0 = 100%) */
-export const ZOOM_MIN = 0.5;
-export const ZOOM_MAX = 3.0;
-export const ZOOM_STEP = 0.1;
+export const ZOOM_MIN = APP_CONSTANTS.ZOOM.MIN;
+export const ZOOM_MAX = APP_CONSTANTS.ZOOM.MAX;
+export const ZOOM_STEP = APP_CONSTANTS.ZOOM.STEP;
 
-export const RESIZE_DEBOUNCE_MS = 50;
+export const RESIZE_DEBOUNCE_MS = APP_CONSTANTS.WINDOW.RESIZE_DEBOUNCE_MS;
 export const LOADING_BAR_TIMEOUT_MS = 300;
 
-export const SETTINGS_FILENAME = 'app-settings.json';
-export const DEFAULT_ZOOM_LEVEL = 1.0;
+export const SETTINGS_FILENAME = APP_CONSTANTS.STORAGE_KEYS.SETTINGS_FILENAME;
+export const DEFAULT_ZOOM_LEVEL = APP_CONSTANTS.ZOOM.DEFAULT;
 
-export const APP_USER_MODEL_ID = 'com.local.aihub';
+export const APP_USER_MODEL_ID = APP_CONSTANTS.APP_USER_MODEL_ID;
 
-export const TITLE_BAR_HEIGHT = 38;
+export const TITLE_BAR_HEIGHT = APP_CONSTANTS.WINDOW.TITLE_BAR_HEIGHT;

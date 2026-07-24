@@ -9,25 +9,12 @@ import {
   ZOOM_MIN,
   ZOOM_MAX,
 } from './constants';
+import type { WindowSettings, AppSettings } from '../shared/types';
+import { Logger } from '../shared/utils/logger';
 
-export interface WindowSettings {
-  width: number;
-  height: number;
-  x: number | undefined;
-  y: number | undefined;
-  isMaximized: boolean;
-  /** Zoom factor (1.0 = 100%) */
-  zoomLevel: number;
-  lastService: string;
-}
+export type { WindowSettings, AppSettings };
 
-export interface AppSettings {
-  window: WindowSettings;
-  minimizeToTray: boolean;
-  globalShortcut: string;
-  language: 'tr' | 'en';
-  autoLaunch: boolean;
-}
+const LOG_TAG = 'SettingsStore';
 
 const DEFAULT_SETTINGS: AppSettings = {
   window: {
@@ -70,20 +57,21 @@ export class SettingsStore {
 
   private load(): AppSettings {
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
-      const parsed = JSON.parse(raw) as Partial<AppSettings>;
-      const window = { ...DEFAULT_SETTINGS.window, ...parsed.window };
-      window.zoomLevel = clampZoom(window.zoomLevel);
+      const rawSettings = fs.readFileSync(this.filePath, 'utf-8');
+      const parsedSettings = JSON.parse(rawSettings) as Partial<AppSettings>;
+      const windowSettings = { ...DEFAULT_SETTINGS.window, ...parsedSettings.window };
+      windowSettings.zoomLevel = clampZoom(windowSettings.zoomLevel);
       return {
-        window,
-        minimizeToTray: parsed.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
-        globalShortcut: parsed.globalShortcut ?? DEFAULT_SETTINGS.globalShortcut,
-        language: (parsed.language === 'tr' || parsed.language === 'en') ? parsed.language : DEFAULT_SETTINGS.language,
-        autoLaunch: parsed.autoLaunch ?? DEFAULT_SETTINGS.autoLaunch,
+        window: windowSettings,
+        minimizeToTray: parsedSettings.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
+        globalShortcut: parsedSettings.globalShortcut ?? DEFAULT_SETTINGS.globalShortcut,
+        language: parsedSettings.language === 'tr' || parsedSettings.language === 'en' ? parsedSettings.language : DEFAULT_SETTINGS.language,
+        autoLaunch: parsedSettings.autoLaunch ?? DEFAULT_SETTINGS.autoLaunch,
       };
-    } catch (err: any) {
-      if (err?.code !== 'ENOENT') {
-        console.warn('[SettingsStore] Settings file corrupted or unreadable, resetting to defaults:', err);
+    } catch (error: unknown) {
+      const errorObj = error as { code?: string };
+      if (errorObj?.code !== 'ENOENT') {
+        Logger.warn(LOG_TAG, 'Settings file corrupted or unreadable, resetting to defaults', { error });
       }
     }
     return { ...DEFAULT_SETTINGS, window: { ...DEFAULT_SETTINGS.window } };
@@ -92,36 +80,38 @@ export class SettingsStore {
   private async writeAsync(): Promise<void> {
     try {
       const filePath = this.filePath;
-      const dir = path.dirname(filePath);
-      await fs.promises.mkdir(dir, { recursive: true });
+      const directory = path.dirname(filePath);
+      await fs.promises.mkdir(directory, { recursive: true });
       await fs.promises.writeFile(filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('[SettingsStore] Failed to save settings asynchronously:', err);
+    } catch (error) {
+      Logger.error(LOG_TAG, 'Failed to save settings asynchronously', error);
     }
   }
 
   private writeSync(): void {
     try {
       const filePath = this.filePath;
-      const dir = path.dirname(filePath);
-      fs.mkdirSync(dir, { recursive: true });
+      const directory = path.dirname(filePath);
+      fs.mkdirSync(directory, { recursive: true });
       fs.writeFileSync(filePath, JSON.stringify(this.settings, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('[SettingsStore] Failed to save settings synchronously:', err);
+    } catch (error) {
+      Logger.error(LOG_TAG, 'Failed to save settings synchronously', error);
     }
   }
 
-  save(): void {
+  public save(): void {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.writeAsync().catch(() => {});
+      this.writeAsync().catch((error) => {
+        Logger.error(LOG_TAG, 'Unhandled exception writing settings asynchronously', error);
+      });
     }, 200);
   }
 
-  saveSync(): void {
+  public saveSync(): void {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
@@ -129,27 +119,27 @@ export class SettingsStore {
     this.writeSync();
   }
 
-  get<K extends keyof AppSettings>(key: K): AppSettings[K] {
+  public get<K extends keyof AppSettings>(key: K): AppSettings[K] {
     return this.settings[key];
   }
 
-  set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
+  public set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
     this.settings[key] = value;
   }
 
-  getWindow(): WindowSettings {
+  public getWindow(): WindowSettings {
     return this.settings.window;
   }
 
-  setWindow(win: Partial<WindowSettings>): void {
-    const next = { ...this.settings.window, ...win };
-    if (win.zoomLevel !== undefined) {
-      next.zoomLevel = clampZoom(win.zoomLevel);
+  public setWindow(winSettings: Partial<WindowSettings>): void {
+    const nextWindowSettings = { ...this.settings.window, ...winSettings };
+    if (winSettings.zoomLevel !== undefined) {
+      nextWindowSettings.zoomLevel = clampZoom(winSettings.zoomLevel);
     }
-    this.settings.window = next;
+    this.settings.window = nextWindowSettings;
   }
 
-  resetWindow(): void {
+  public resetWindow(): void {
     this.settings.window = { ...DEFAULT_SETTINGS.window };
   }
 }

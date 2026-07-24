@@ -1,25 +1,10 @@
-export interface ServiceUIInfo {
-  serviceId?: string;
-  name?: string;
-  isHome?: boolean;
-}
+import type { AIServiceCategory, ServiceUIInfo, TabInfo, TabsState, Language } from '../shared/types';
 
-export interface TabInfo {
-  id: string;
-  serviceId: string | null;
-  name: string;
-  isHome: boolean;
-  isLoading: boolean;
-}
-
-export interface TabsState {
-  tabs: TabInfo[];
-  activeTabId: string | null;
-}
+export type { ServiceUIInfo, TabInfo, TabsState };
 
 export interface AiDesktopAPI {
-  getServices(): Promise<any[]>;
-  getCurrentServiceId(): Promise<string>;
+  getServices(): Promise<AIServiceCategory[]>;
+  getCurrentServiceId(): Promise<string | null>;
   isServiceLoading(): Promise<boolean>;
   showHomepage(): void;
   goBack(): void;
@@ -33,8 +18,8 @@ export interface AiDesktopAPI {
   setGlobalShortcut(shortcut: string): void;
   getAutoLaunch(): Promise<boolean>;
   setAutoLaunch(enabled: boolean): void;
-  getLanguage(): Promise<string>;
-  setLanguage(language: string): void;
+  getLanguage(): Promise<Language>;
+  setLanguage(language: Language): void;
   getTabsState(): Promise<TabsState>;
   createTab(serviceId?: string): void;
   switchTab(tabId: string): void;

@@ -5,15 +5,13 @@ import { setupDownloads } from './downloads';
 import { ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, DEFAULT_ZOOM_LEVEL, TITLE_BAR_HEIGHT } from './constants';
 import type { SettingsStore } from './settings-store';
 import { getServiceById, getDefaultService } from './services';
-import type { AIService } from './services';
+import type { AIService, TabInfo, Language } from '../shared/types';
+import { IPC_CHANNELS } from '../shared/constants/ipc';
+import { Logger } from '../shared/utils/logger';
 
-export interface TabInfo {
-  id: string;
-  serviceId: string | null;
-  name: string;
-  isHome: boolean;
-  isLoading: boolean;
-}
+export type { TabInfo };
+
+const LOG_TAG = 'ServiceView';
 
 export interface Tab {
   id: string;
@@ -29,9 +27,9 @@ export interface Tab {
 let tabs: Tab[] = [];
 let activeTabId: string | null = null;
 let settingsRef: SettingsStore | null = null;
-let currentLanguage: 'tr' | 'en' = 'tr';
+let currentLanguage: Language = 'tr';
 
-export function setLanguage(lang: 'tr' | 'en'): void {
+export function setLanguage(lang: Language): void {
   currentLanguage = lang;
   for (const tab of tabs) {
     if (tab.isHome) {
@@ -89,7 +87,7 @@ export function getCurrentServiceId(): string | null {
 export function notifyTabsUpdated(win?: BrowserWindow): void {
   const targetWin = win || (BrowserWindow.getAllWindows()[0] ?? null);
   if (targetWin && !targetWin.isDestroyed()) {
-    targetWin.webContents.send('tabs-updated', {
+    targetWin.webContents.send(IPC_CHANNELS.TABS_UPDATED, {
       tabs: getTabsInfo(),
       activeTabId,
     });
@@ -112,7 +110,9 @@ function detachViewFromWindow(view: WebContentsView, win: BrowserWindow): void {
   if (!view || view.webContents.isDestroyed() || win.isDestroyed()) return;
   try {
     win.contentView.removeChildView(view);
-  } catch {}
+  } catch (err) {
+    Logger.debug(LOG_TAG, 'Ignored child view removal exception', { err });
+  }
 }
 
 function sleepTab(tab: Tab, win: BrowserWindow): void {
@@ -121,7 +121,9 @@ function sleepTab(tab: Tab, win: BrowserWindow): void {
     tab.viewAttached = false;
     try {
       tab.view.webContents.setAudioMuted(true);
-    } catch {}
+    } catch (err) {
+      Logger.debug(LOG_TAG, 'Failed to mute audio on tab sleep', { err });
+    }
   }
 }
 
@@ -136,7 +138,7 @@ function wakeTab(tab: Tab, win: BrowserWindow): void {
       resizeViewToWindow(win);
       tab.view.webContents.focus();
     } catch (err) {
-      console.warn('[ServiceView] Failed to wake tab:', err);
+      Logger.warn(LOG_TAG, 'Failed to wake tab', { err });
     }
   }
 }
@@ -210,7 +212,7 @@ export function createTab(
     if (targetWin && !targetWin.isDestroyed()) {
       targetWin.setProgressBar(-1, { mode: 'indeterminate' });
       if (activeTabId === tabId) {
-        targetWin.webContents.send('service-loading-start');
+        targetWin.webContents.send(IPC_CHANNELS.SERVICE_LOADING_START);
       }
       notifyTabsUpdated(targetWin);
     }
@@ -225,7 +227,7 @@ export function createTab(
         newTab.viewAttached = true;
         view.webContents.focus();
       }
-      targetWin.webContents.send('service-loading-stop');
+      targetWin.webContents.send(IPC_CHANNELS.SERVICE_LOADING_STOP);
     }
   });
 
@@ -241,7 +243,7 @@ export function createTab(
           newTab.viewAttached = true;
           view.webContents.focus();
         }
-        targetWin.webContents.send('service-loading-stop');
+        targetWin.webContents.send(IPC_CHANNELS.SERVICE_LOADING_STOP);
       }
       notifyTabsUpdated(targetWin);
     }
@@ -254,7 +256,7 @@ export function createTab(
       targetWin.setProgressBar(-1, { mode: 'none' });
       if (activeTabId === tabId) {
         const errMsg = errorDescription || (currentLanguage === 'tr' ? 'Bilinmeyen hata' : 'Unknown error');
-        targetWin.webContents.send('service-loading-error', errMsg);
+        targetWin.webContents.send(IPC_CHANNELS.SERVICE_LOADING_ERROR, errMsg);
       }
       notifyTabsUpdated(targetWin);
     }
@@ -307,11 +309,11 @@ export function switchTab(tabId: string, win: BrowserWindow, settings?: Settings
       }
     }
     win.setTitle('AI Hub');
-    win.webContents.send('update-service-ui', { isHome: true });
-    win.webContents.send('service-loading-stop');
+    win.webContents.send(IPC_CHANNELS.UPDATE_SERVICE_UI, { isHome: true });
+    win.webContents.send(IPC_CHANNELS.SERVICE_LOADING_STOP);
   } else {
     win.setTitle(`AI Hub - ${targetTab.name}`);
-    win.webContents.send('update-service-ui', {
+    win.webContents.send(IPC_CHANNELS.UPDATE_SERVICE_UI, {
       serviceId: targetTab.serviceId,
       name: targetTab.name,
       isHome: false,
@@ -320,14 +322,14 @@ export function switchTab(tabId: string, win: BrowserWindow, settings?: Settings
     if (targetTab.isLoaded && !targetTab.isLoading) {
       // Already loaded! Wake tab view immediately and hide splash
       wakeTab(targetTab, win);
-      win.webContents.send('service-loading-stop');
+      win.webContents.send(IPC_CHANNELS.SERVICE_LOADING_STOP);
     } else {
       // Still loading! Keep view detached so splash screen on DOM is visible
       if (targetTab.view && targetTab.viewAttached) {
         detachViewFromWindow(targetTab.view, win);
         targetTab.viewAttached = false;
       }
-      win.webContents.send('service-loading-start');
+      win.webContents.send(IPC_CHANNELS.SERVICE_LOADING_START);
     }
   }
 
@@ -345,13 +347,15 @@ export function closeTab(tabId: string, win: BrowserWindow, settings?: SettingsS
   if (tabToClose.view) {
     try {
       win.contentView.removeChildView(tabToClose.view);
-    } catch {}
+    } catch (err) {
+      Logger.debug(LOG_TAG, 'Failed child view remove on closeTab', { err });
+    }
     try {
       if (!tabToClose.view.webContents.isDestroyed()) {
         tabToClose.view.webContents.close();
       }
     } catch (err) {
-      console.warn('[ServiceView] Failed to close webContents:', err);
+      Logger.warn(LOG_TAG, 'Failed to close webContents', { err });
     }
     tabToClose.view = null;
   }
@@ -412,7 +416,7 @@ export function openServiceInTab(
       if (!win.isDestroyed()) {
         win.setProgressBar(-1, { mode: 'indeterminate' });
         if (activeTabId === active.id) {
-          win.webContents.send('service-loading-start');
+          win.webContents.send(IPC_CHANNELS.SERVICE_LOADING_START);
         }
         notifyTabsUpdated(win);
       }
@@ -427,7 +431,7 @@ export function openServiceInTab(
           active.viewAttached = true;
           view.webContents.focus();
         }
-        win.webContents.send('service-loading-stop');
+        win.webContents.send(IPC_CHANNELS.SERVICE_LOADING_STOP);
       }
     });
 
@@ -443,7 +447,7 @@ export function openServiceInTab(
             active.viewAttached = true;
             view.webContents.focus();
           }
-          win.webContents.send('service-loading-stop');
+          win.webContents.send(IPC_CHANNELS.SERVICE_LOADING_STOP);
         }
         notifyTabsUpdated(win);
       }
@@ -456,7 +460,7 @@ export function openServiceInTab(
         win.setProgressBar(-1, { mode: 'none' });
         if (activeTabId === active.id) {
           const errMsg = errorDescription || (currentLanguage === 'tr' ? 'Bilinmeyen hata' : 'Unknown error');
-          win.webContents.send('service-loading-error', errMsg);
+          win.webContents.send(IPC_CHANNELS.SERVICE_LOADING_ERROR, errMsg);
         }
         notifyTabsUpdated(win);
       }

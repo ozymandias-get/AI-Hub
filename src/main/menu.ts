@@ -13,6 +13,9 @@ import {
 import { SERVICE_CATEGORIES, getServiceById } from './services';
 import type { SettingsStore } from './settings-store';
 import { setQuitting } from './app-state';
+import { Logger } from '../shared/utils/logger';
+
+const LOG_TAG = 'Menu';
 
 export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
   const isDev = !app.isPackaged;
@@ -139,7 +142,7 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
             const id = getCurrentServiceId();
             if (id) {
               const svc = getServiceById(id);
-              if (svc) shell.openExternal(svc.url).catch((err) => console.warn('Failed to open browser:', err));
+              if (svc) shell.openExternal(svc.url).catch((err) => Logger.warn(LOG_TAG, 'Failed to open browser', { err }));
             }
           },
         },
@@ -151,7 +154,7 @@ export function setupMenu(win: BrowserWindow, settings: SettingsStore): void {
               type: 'info',
               title: 'AI Hub',
               message: `AI Hub v${app.getVersion()}\nElectron: ${process.versions.electron}\nChromium: ${process.versions.chrome}\nNode.js: ${process.versions.node}`,
-            }).catch((err) => console.warn('Failed to show version dialog:', err));
+            }).catch((err) => Logger.warn(LOG_TAG, 'Failed to show version dialog', { err }));
           },
         },
       ],

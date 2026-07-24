@@ -1,15 +1,5 @@
-export interface AIService {
-  id: string;
-  name: string;
-  url: string;
-  category: string;
-}
-
-export interface AIServiceCategory {
-  name: string;
-  key: string;
-  services: AIService[];
-}
+import type { AIService, AIServiceCategory } from '../shared/types';
+export type { AIService, AIServiceCategory };
 
 export const SERVICE_CATEGORIES: AIServiceCategory[] = [
   {
