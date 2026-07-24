@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="900" y2="940" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#171923"/>
+      <stop offset="0.52" stop-color="#0B0C12"/>
+      <stop offset="1" stop-color="#05060A"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="260" y1="210" x2="790" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="0.42" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(512 500) rotate(90) scale(370)">
+      <stop offset="0" stop-color="#60A5FA" stop-opacity=".24"/>
+      <stop offset=".58" stop-color="#8B5CF6" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="26" stdDeviation="30" flood-color="#000" flood-opacity=".55"/>
+    </filter>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <clipPath id="clip">
+      <rect x="52" y="52" width="920" height="920" rx="228"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="52" y="52" width="920" height="920" rx="228" fill="url(#bg)"/>
+    <rect x="54" y="54" width="916" height="916" rx="226" fill="none" stroke="#FFFFFF" stroke-opacity=".10" stroke-width="4"/>
+  </g>
+
+  <g clip-path="url(#clip)">
+    <circle cx="512" cy="500" r="370" fill="url(#glow)"/>
+    <path d="M160 220C330 102 680 92 885 250" fill="none" stroke="#FFFFFF" stroke-opacity=".035" stroke-width="54" stroke-linecap="round"/>
+    <path d="M140 820C350 930 700 948 910 785" fill="none" stroke="#FFFFFF" stroke-opacity=".022" stroke-width="70" stroke-linecap="round"/>
+  </g>
+
+  <!-- subtle outer halo -->
+  <circle cx="512" cy="512" r="260" fill="none" stroke="#60A5FA" stroke-opacity=".18" stroke-width="22" filter="url(#softGlow)"/>
+
+  <!-- hub links -->
+  <g fill="none" stroke="url(#accent)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 512 L512 276"/>
+    <path d="M512 512 L716 394"/>
+    <path d="M512 512 L716 630"/>
+    <path d="M512 512 L512 748"/>
+    <path d="M512 512 L308 630"/>
+    <path d="M512 512 L308 394"/>
+  </g>
+
+  <!-- dark separators make the network crisp at small sizes -->
+  <g fill="none" stroke="#0A0B10" stroke-width="14" stroke-linecap="round">
+    <path d="M512 512 L512 276"/>
+    <path d="M512 512 L716 394"/>
+    <path d="M512 512 L716 630"/>
+    <path d="M512 512 L512 748"/>
+    <path d="M512 512 L308 630"/>
+    <path d="M512 512 L308 394"/>
+  </g>
+
+  <!-- satellite nodes -->
+  <g fill="#0B0D14" stroke="url(#accent)" stroke-width="28">
+    <circle cx="512" cy="254" r="58"/>
+    <circle cx="736" cy="383" r="58"/>
+    <circle cx="736" cy="641" r="58"/>
+    <circle cx="512" cy="770" r="58"/>
+    <circle cx="288" cy="641" r="58"/>
+    <circle cx="288" cy="383" r="58"/>
+  </g>
+  <g fill="#F8FAFC">
+    <circle cx="512" cy="254" r="15"/>
+    <circle cx="736" cy="383" r="15"/>
+    <circle cx="736" cy="641" r="15"/>
+    <circle cx="512" cy="770" r="15"/>
+    <circle cx="288" cy="641" r="15"/>
+    <circle cx="288" cy="383" r="15"/>
+  </g>
+
+  <!-- central AI hub: hexagon with spark/portal cut -->
+  <path d="M512 354
+           C529 354 545 359 560 368
+           L632 410
+           C662 427 680 459 680 494
+           L680 530
+           C680 565 662 597 632 614
+           L560 656
+           C530 673 494 673 464 656
+           L392 614
+           C362 597 344 565 344 530
+           L344 494
+           C344 459 362 427 392 410
+           L464 368
+           C479 359 495 354 512 354Z"
+        fill="url(#accent)"/>
+
+  <path d="M512 414
+           C526 414 538 424 541 438
+           L551 481
+           L594 491
+           C608 494 618 506 618 520
+           C618 534 608 546 594 549
+           L551 559
+           L541 602
+           C538 616 526 626 512 626
+           C498 626 486 616 483 602
+           L473 559
+           L430 549
+           C416 546 406 534 406 520
+           C406 506 416 494 430 491
+           L473 481
+           L483 438
+           C486 424 498 414 512 414Z"
+        fill="#090A0F"/>
+  <circle cx="512" cy="520" r="42" fill="#F8FAFC"/>
+  <circle cx="512" cy="520" r="18" fill="url(#accent)"/>
+
+  <!-- glass highlight -->
+  <path d="M342 206C455 132 642 134 755 205" fill="none" stroke="#FFFFFF" stroke-opacity=".10" stroke-width="18" stroke-linecap="round"/>
+</svg>

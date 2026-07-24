@@ -1,51 +1,26 @@
 import sharp from 'sharp';
-import { writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 
-const svgContent = `<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+let svgContent = '';
+if (existsSync('assets/icon.svg')) {
+  svgContent = readFileSync('assets/icon.svg', 'utf-8');
+} else {
+  svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <!-- Cyan to Magenta Cyber Gradient -->
-    <linearGradient id="cyberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00F5FF" />
-      <stop offset="40%" stop-color="#7B2CBF" />
-      <stop offset="100%" stop-color="#FF007F" />
+    <linearGradient id="bg" x1="120" y1="80" x2="900" y2="940" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#171923"/>
+      <stop offset="0.52" stop-color="#0B0C12"/>
+      <stop offset="1" stop-color="#05060A"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="260" y1="210" x2="790" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="0.42" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#A855F7"/>
     </linearGradient>
   </defs>
-
-  <!-- Background Circle (Dark Obsidian) -->
-  <circle cx="256" cy="256" r="236" fill="#0d0e15" stroke="url(#cyberGradient)" stroke-width="16" />
-
-  <!-- Brain Circuit Group -->
-  <g transform="translate(106, 106) scale(12.5)">
-    <!-- Main Brain Outlines -->
-    <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" 
-          fill="none" stroke="url(#cyberGradient)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-    <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" 
-          fill="none" stroke="url(#cyberGradient)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-    
-    <!-- Connecting Circuits -->
-    <path d="M9 13a4.5 4.5 0 0 0 3-4" fill="none" stroke="url(#cyberGradient)" stroke-width="1.5" stroke-linecap="round" />
-    <path d="M15 13a4.5 4.5 0 0 1-3-4" fill="none" stroke="url(#cyberGradient)" stroke-width="1.5" stroke-linecap="round" />
-    
-    <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5" fill="none" stroke="url(#cyberGradient)" stroke-width="1.5" stroke-linecap="round" />
-    <path d="M17.997 5.125a3 3 0 0 1-.398 1.375" fill="none" stroke="url(#cyberGradient)" stroke-width="1.5" stroke-linecap="round" />
-    
-    <path d="M3.477 10.896a4 4 0 0 1 .556 6.588" fill="none" stroke="url(#cyberGradient)" stroke-width="1.5" stroke-linecap="round" />
-    <path d="M20.523 10.896a4 4 0 0 0-.556 6.588" fill="none" stroke="url(#cyberGradient)" stroke-width="1.5" stroke-linecap="round" />
-
-    <!-- Neural Nodes / Dots -->
-    <circle cx="12" cy="5" r="1.2" fill="#00F5FF" />
-    <circle cx="12" cy="18" r="1.2" fill="#FF007F" />
-    <circle cx="12" cy="9" r="1.0" fill="#7B2CBF" />
-    
-    <!-- Left nodes -->
-    <circle cx="6" cy="5.1" r="0.8" fill="#00F5FF" />
-    <circle cx="3.5" cy="10.9" r="0.8" fill="#00F5FF" />
-    
-    <!-- Right nodes -->
-    <circle cx="18" cy="5.1" r="0.8" fill="#FF007F" />
-    <circle cx="20.5" cy="10.9" r="0.8" fill="#FF007F" />
-  </g>
+  <rect x="52" y="52" width="920" height="920" rx="228" fill="url(#bg)"/>
 </svg>`;
+}
 
 async function main() {
   const sizes = [16, 32, 48, 64, 128, 256];
