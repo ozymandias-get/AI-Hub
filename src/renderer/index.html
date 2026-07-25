@@ -82,10 +82,23 @@
         </div>
       </div>
 
-      <div class="categories-bar" id="categories-bar"></div>
+      <div class="dashboard-body">
+        <aside class="category-sidebar" id="category-sidebar">
+          <div class="category-sidebar-header">
+            <div class="sidebar-title-group">
+              <svg class="sidebar-title-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+              <span class="sidebar-title-text" id="sidebar-category-title">Kategoriler</span>
+            </div>
+            <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="Kategorileri Daralt / Genişlet" aria-label="Kategorileri Daralt / Genişlet">
+              <svg class="toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+          </div>
+          <div class="categories-bar" id="categories-bar"></div>
+        </aside>
 
-      <div class="services-container">
-        <div class="services-grid" id="services-grid"></div>
+        <main class="services-container">
+          <div class="services-grid" id="services-grid"></div>
+        </main>
       </div>
     </div>
 

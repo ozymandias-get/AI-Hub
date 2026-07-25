@@ -38,6 +38,7 @@ export const translations: TransMap = {
   'settings.autolaunch.enabled': { tr: 'Açık', en: 'On' },
   'settings.autolaunch.disabled': { tr: 'Kapalı (Devre Dışı)', en: 'Off (Disabled)' },
 
+  'category.title': { tr: 'Kategoriler', en: 'Categories' },
   'category.all': { tr: 'Tümü', en: 'All' },
   'category.favorites': { tr: 'Favoriler', en: 'Favorites' },
   'category.chat': { tr: 'Sohbet', en: 'Chat' },

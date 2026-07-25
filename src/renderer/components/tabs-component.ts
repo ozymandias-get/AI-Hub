@@ -3,6 +3,8 @@ import { t } from '../services/i18n-service';
 import { IpcClientService } from '../services/ipc-client';
 
 export class TabsComponent {
+  private lastStateKey = '';
+
   constructor(private readonly tabsListContainer: HTMLElement) {
     this.bindEvents();
   }
@@ -39,6 +41,11 @@ export class TabsComponent {
   }
 
   public render(tabs: TabInfo[], activeTabId: string | null): void {
+    const currentStateKey = `${activeTabId}:${tabs.map((t) => `${t.id}_${t.name}_${t.isLoading}_${t.isHome}`).join('|')}`;
+    if (currentStateKey === this.lastStateKey) {
+      return;
+    }
+    this.lastStateKey = currentStateKey;
     this.tabsListContainer.replaceChildren();
 
     const fragment = document.createDocumentFragment();

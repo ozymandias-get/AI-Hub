@@ -44,7 +44,12 @@ function getAcceptLanguage(): string {
     : 'en-US,en;q=0.9,tr-TR,tr;q=0.8';
 }
 
+const configuredSessions = new WeakSet<Electron.Session>();
+
 function applyLanguageToSession(session: Electron.Session): void {
+  if (configuredSessions.has(session)) return;
+  configuredSessions.add(session);
+
   session.webRequest.onBeforeSendHeaders((details, callback) => {
     details.requestHeaders['Accept-Language'] = getAcceptLanguage();
     callback({ requestHeaders: details.requestHeaders });

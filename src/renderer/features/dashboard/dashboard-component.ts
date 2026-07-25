@@ -59,6 +59,7 @@ export class DashboardComponent {
 
   public updateFavorites(favorites: Set<string>): void {
     this.favorites = favorites;
+    this.populateCategories();
     if (this.activeCategoryKey === 'favorites') {
       this.renderServices();
     }
@@ -67,8 +68,10 @@ export class DashboardComponent {
   public updateLanguage(): void {
     const dashTitle = document.getElementById('dashboard-title');
     const dashSub = document.getElementById('dashboard-subtitle');
+    const sidebarTitle = document.getElementById('sidebar-category-title');
     if (dashTitle) dashTitle.textContent = t('dashboard.title');
     if (dashSub) dashSub.textContent = t('dashboard.subtitle');
+    if (sidebarTitle) sidebarTitle.textContent = t('category.title');
 
     this.searchInput.placeholder = t('search.placeholder');
 
@@ -97,6 +100,20 @@ export class DashboardComponent {
   }
 
   private bindEvents(): void {
+    // Sidebar collapse / expand toggle
+    const sidebar = document.getElementById('category-sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle-btn');
+    if (sidebar && toggleBtn) {
+      const isCollapsed = localStorage.getItem('category_sidebar_collapsed') === 'true';
+      if (isCollapsed) {
+        sidebar.classList.add('collapsed');
+      }
+      toggleBtn.addEventListener('click', () => {
+        const collapsed = sidebar.classList.toggle('collapsed');
+        localStorage.setItem('category_sidebar_collapsed', collapsed ? 'true' : 'false');
+      });
+    }
+
     // Search input debounced
     this.searchInput.addEventListener('input', (e) => {
       if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
@@ -106,20 +123,27 @@ export class DashboardComponent {
       }, APP_CONSTANTS.SEARCH.DEBOUNCE_MS);
     });
 
-    // Delegated spotlight hover effect
+    // Delegated spotlight hover effect (GPU & layout optimized)
+    const cardRects = new WeakMap<HTMLElement, DOMRect>();
     let spotlightRafId: number | null = null;
     this.servicesGrid.addEventListener(
       'mousemove',
       (e) => {
         if (spotlightRafId) return;
+        const target = e.target as HTMLElement;
+        const card = target.closest('.service-card') as HTMLElement | null;
+        if (!card) return;
+
         const clientX = e.clientX;
         const clientY = e.clientY;
-        const target = e.target as HTMLElement;
+
         spotlightRafId = requestAnimationFrame(() => {
           spotlightRafId = null;
-          const card = target.closest('.service-card') as HTMLElement | null;
-          if (!card) return;
-          const rect = card.getBoundingClientRect();
+          let rect = cardRects.get(card);
+          if (!rect) {
+            rect = card.getBoundingClientRect();
+            cardRects.set(card, rect);
+          }
           card.style.setProperty('--x', `${clientX - rect.left}px`);
           card.style.setProperty('--y', `${clientY - rect.top}px`);
         });
@@ -205,26 +229,48 @@ export class DashboardComponent {
   private populateCategories(): void {
     this.categoriesBar.replaceChildren();
 
-    const allTab = document.createElement('button');
-    allTab.className = `category-tab ${this.activeCategoryKey === 'all' ? 'active' : ''}`;
-    allTab.textContent = `${CATEGORY_ICONS.all} ${t('category.all')}`;
-    allTab.addEventListener('click', () => this.selectCategory('all', allTab));
+    const allCount = this.flatServices.length;
+    const allTab = this.createCategoryTab('all', CATEGORY_ICONS.all, t('category.all'), allCount);
     this.categoriesBar.appendChild(allTab);
 
-    const favTab = document.createElement('button');
-    favTab.className = `category-tab ${this.activeCategoryKey === 'favorites' ? 'active' : ''}`;
-    favTab.textContent = `${CATEGORY_ICONS.favorites} ${t('category.favorites')}`;
-    favTab.addEventListener('click', () => this.selectCategory('favorites', favTab));
+    const favCount = this.favorites.size;
+    const favTab = this.createCategoryTab('favorites', CATEGORY_ICONS.favorites, t('category.favorites'), favCount);
     this.categoriesBar.appendChild(favTab);
 
     for (const categoryItem of this.categories) {
-      const tab = document.createElement('button');
-      tab.className = `category-tab ${this.activeCategoryKey === categoryItem.key ? 'active' : ''}`;
+      const count = categoryItem.services ? categoryItem.services.length : 0;
       const icon = CATEGORY_ICONS[categoryItem.key] || '🔮';
-      tab.textContent = `${icon} ${getCategoryName(categoryItem.key)}`;
-      tab.addEventListener('click', () => this.selectCategory(categoryItem.key, tab));
+      const name = getCategoryName(categoryItem.key);
+      const tab = this.createCategoryTab(categoryItem.key, icon, name, count);
       this.categoriesBar.appendChild(tab);
     }
+  }
+
+  private createCategoryTab(key: string, icon: string, name: string, count: number): HTMLButtonElement {
+    const tab = document.createElement('button');
+    tab.className = `category-tab ${this.activeCategoryKey === key ? 'active' : ''}`;
+    tab.setAttribute('data-category', key);
+    tab.setAttribute('data-tooltip', name);
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'category-tab-icon';
+    iconSpan.textContent = icon;
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'category-tab-text';
+    textSpan.textContent = name;
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'category-tab-count';
+    countSpan.textContent = count.toString();
+
+    tab.appendChild(iconSpan);
+    tab.appendChild(textSpan);
+    tab.appendChild(countSpan);
+
+    tab.addEventListener('click', () => this.selectCategory(key, tab));
+
+    return tab;
   }
 
   private selectCategory(categoryKey: string, tabElement: HTMLButtonElement): void {
@@ -306,10 +352,18 @@ export class DashboardComponent {
       const nameEl = card.querySelector('.service-name');
       const descEl = card.querySelector('.service-desc');
       const catEl = card.querySelector('.category-tag');
+      const imgEl = card.querySelector('.service-logo-img') as HTMLImageElement | null;
+      const fallbackSpan = card.querySelector('.service-icon span') as HTMLElement | null;
 
       if (nameEl) nameEl.textContent = serviceItem.name;
       if (descEl) descEl.textContent = description;
       if (catEl) catEl.textContent = categoryName;
+      if (imgEl && fallbackSpan) {
+        imgEl.onerror = () => {
+          imgEl.style.display = 'none';
+          fallbackSpan.style.display = 'inline';
+        };
+      }
 
       fragment.appendChild(card);
     }
