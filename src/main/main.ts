@@ -44,6 +44,12 @@ let resizeTimer: NodeJS.Timeout | null = null;
 
 export function applyAutoLaunch(enabled: boolean): void {
   try {
+    if (!app.isPackaged) {
+      app.setLoginItemSettings({
+        openAtLogin: false,
+      });
+      return;
+    }
     app.setLoginItemSettings({
       openAtLogin: enabled,
       openAsHidden: false,

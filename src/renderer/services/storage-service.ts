@@ -5,6 +5,7 @@ import { Logger } from '../../shared/utils/logger';
 const LOG_TAG = 'StorageService';
 
 const FAVORITES_KEY = APP_CONSTANTS.STORAGE_KEYS.FAVORITES;
+const LAST_OPENED_KEY = APP_CONSTANTS.STORAGE_KEYS.LAST_OPENED;
 const LANGUAGE_KEY = APP_CONSTANTS.STORAGE_KEYS.LANGUAGE;
 
 export function loadFavorites(): Set<string> {
@@ -25,6 +26,29 @@ export function saveFavorites(favorites: Set<string>): void {
   } catch (err) {
     Logger.warn(LOG_TAG, 'Failed to save favorites to localStorage', { err });
   }
+}
+
+export function loadLastOpenedMap(): Record<string, number> {
+  try {
+    const saved = localStorage.getItem(LAST_OPENED_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (err) {
+    Logger.warn(LOG_TAG, 'Failed to load last opened map from localStorage', { err });
+  }
+  return {};
+}
+
+export function recordServiceOpened(serviceId: string): Record<string, number> {
+  const map = loadLastOpenedMap();
+  map[serviceId] = Date.now();
+  try {
+    localStorage.setItem(LAST_OPENED_KEY, JSON.stringify(map));
+  } catch (err) {
+    Logger.warn(LOG_TAG, 'Failed to save last opened map to localStorage', { err });
+  }
+  return map;
 }
 
 export function saveLanguage(lang: Language): void {

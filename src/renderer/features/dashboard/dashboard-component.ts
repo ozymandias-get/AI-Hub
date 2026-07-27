@@ -22,6 +22,7 @@ export class DashboardComponent {
   private activeCategoryKey = 'all';
   private searchQuery = '';
   private favorites: Set<string> = new Set();
+  private lastOpenedMap: Record<string, number> = {};
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -42,7 +43,7 @@ export class DashboardComponent {
     this.bindEvents();
   }
 
-  public setData(categories: AIServiceCategory[], favorites: Set<string>): void {
+  public setData(categories: AIServiceCategory[], favorites: Set<string>, lastOpenedMap: Record<string, number>): void {
     this.categories = categories;
     this.flatServices = categories.flatMap((categoryGroup) =>
       categoryGroup.services.map((serviceItem) => ({
@@ -51,6 +52,7 @@ export class DashboardComponent {
       }))
     );
     this.favorites = favorites;
+    this.lastOpenedMap = lastOpenedMap;
 
     this.populateFallbackSelects();
     this.populateCategories();
@@ -63,6 +65,11 @@ export class DashboardComponent {
     if (this.activeCategoryKey === 'favorites') {
       this.renderServices();
     }
+  }
+
+  public updateLastOpenedMap(lastOpenedMap: Record<string, number>): void {
+    this.lastOpenedMap = lastOpenedMap;
+    this.renderServices();
   }
 
   public updateLanguage(): void {
@@ -282,12 +289,37 @@ export class DashboardComponent {
     this.renderServices();
   }
 
+  private formatRelativeTime(timestamp?: number): string {
+    if (!timestamp) return t('service.neverOpened');
+    const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+    if (diffSec < 60) {
+      return t('time.justNow');
+    }
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) {
+      return t('time.minutesAgo').replace('{n}', diffMin.toString());
+    }
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) {
+      return t('time.hoursAgo').replace('{n}', diffHours.toString());
+    }
+    const diffDays = Math.floor(diffHours / 24);
+    return t('time.daysAgo').replace('{n}', diffDays.toString());
+  }
+
   public renderServices(): void {
     this.servicesGrid.replaceChildren();
 
     let candidateServices: ServiceWithSearch[] = [];
     if (this.activeCategoryKey === 'all') {
-      candidateServices = this.flatServices;
+      candidateServices = [...this.flatServices].sort((a, b) => {
+        const timeA = this.lastOpenedMap[a.id] || 0;
+        const timeB = this.lastOpenedMap[b.id] || 0;
+        if (timeA !== timeB) {
+          return timeB - timeA;
+        }
+        return a.name.localeCompare(b.name);
+      });
     } else if (this.activeCategoryKey === 'favorites') {
       candidateServices = this.flatServices.filter((service) => this.favorites.has(service.id));
     } else {
@@ -332,6 +364,11 @@ export class DashboardComponent {
       const letter = serviceItem.name.charAt(0);
       const iconUrl = `./logos/${serviceItem.id}.png`;
       const isFavorite = this.favorites.has(serviceItem.id);
+      const lastOpenedTimestamp = this.lastOpenedMap[serviceItem.id];
+      const timeStr = this.formatRelativeTime(lastOpenedTimestamp);
+      const lastOpenedText = lastOpenedTimestamp
+        ? t('service.lastOpened').replace('{time}', timeStr)
+        : t('service.neverOpened');
 
       card.innerHTML = `
         <button class="favorite-btn ${isFavorite ? 'active' : ''}" data-id="${serviceItem.id}" title="${isFavorite ? t('favorite.remove') : t('favorite.add')}" aria-label="${isFavorite ? t('favorite.remove') : t('favorite.add')}">★</button>
@@ -343,6 +380,9 @@ export class DashboardComponent {
           <div class="service-name"></div>
         </div>
         <div class="service-desc"></div>
+        <div class="card-meta">
+          <span class="last-opened-tag ${lastOpenedTimestamp ? 'has-timestamp' : ''}"></span>
+        </div>
         <div class="card-footer">
           <span class="category-tag"></span>
           <button class="launch-btn" title="${t('service.launch')}" aria-label="${t('service.launch')}">➔</button>
@@ -351,12 +391,14 @@ export class DashboardComponent {
 
       const nameEl = card.querySelector('.service-name');
       const descEl = card.querySelector('.service-desc');
+      const metaEl = card.querySelector('.last-opened-tag');
       const catEl = card.querySelector('.category-tag');
       const imgEl = card.querySelector('.service-logo-img') as HTMLImageElement | null;
       const fallbackSpan = card.querySelector('.service-icon span') as HTMLElement | null;
 
       if (nameEl) nameEl.textContent = serviceItem.name;
       if (descEl) descEl.textContent = description;
+      if (metaEl) metaEl.textContent = lastOpenedText;
       if (catEl) catEl.textContent = categoryName;
       if (imgEl && fallbackSpan) {
         imgEl.onerror = () => {

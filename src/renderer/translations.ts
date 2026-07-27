@@ -56,6 +56,12 @@ export const translations: TransMap = {
   'favorite.empty': { tr: 'Henüz favori model eklemediniz. Kartların sağ üstündeki yıldız simgesine tıklayarak favori modellerinizi belirleyebilirsiniz.', en: 'You haven\'t added any favorites yet. Click the star icon on the top right of cards to mark your favorite models.' },
 
   'service.launch': { tr: 'Başlat', en: 'Launch' },
+  'service.lastOpened': { tr: 'Son açılma: {time}', en: 'Last opened: {time}' },
+  'service.neverOpened': { tr: 'Henüz açılmadı', en: 'Never opened' },
+  'time.justNow': { tr: 'Az önce', en: 'Just now' },
+  'time.minutesAgo': { tr: '{n} dk önce', en: '{n}m ago' },
+  'time.hoursAgo': { tr: '{n} saat önce', en: '{n}h ago' },
+  'time.daysAgo': { tr: '{n} gün önce', en: '{n}d ago' },
   'service.selectCategory': { tr: 'Kategori Seç', en: 'Select Category' },
   'service.selectService': { tr: 'Servis Seç', en: 'Select Service' },
   'service.notFound': { tr: 'Aramanıza uygun yapay zeka servisi bulunamadı.', en: 'No AI services found matching your search.' },

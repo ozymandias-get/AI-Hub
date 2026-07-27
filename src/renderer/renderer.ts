@@ -6,7 +6,7 @@ import {
   getCurrentLanguage,
   rebuildDescriptionsLower,
 } from './services/i18n-service';
-import { loadFavorites, saveFavorites, saveLanguage } from './services/storage-service';
+import { loadFavorites, saveFavorites, saveLanguage, loadLastOpenedMap, recordServiceOpened } from './services/storage-service';
 import { TitlebarComponent } from './components/titlebar-component';
 import { TabsComponent } from './components/tabs-component';
 import { DashboardComponent } from './features/dashboard/dashboard-component';
@@ -138,11 +138,17 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   const tabsComponent = new TabsComponent(tabsList);
 
+  let lastOpenedMap = loadLastOpenedMap();
+
   // View Switchers
   function launchService(serviceId: string, openInNewTab = false): void {
     currentServiceId = serviceId;
     overlayComponent.setCurrentServiceId(serviceId);
     overlayComponent.showSplash(serviceId);
+
+    // Record last opened timestamp & refresh dashboard order
+    lastOpenedMap = recordServiceOpened(serviceId);
+    dashboardComponent.updateLastOpenedMap(lastOpenedMap);
 
     const serviceItem = categories
       .flatMap((categoryGroup) => categoryGroup.services)
@@ -214,7 +220,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     categories = await IpcClientService.getServices();
     overlayComponent.setCategories(categories);
-    dashboardComponent.setData(categories, favorites);
+    dashboardComponent.setData(categories, favorites, lastOpenedMap);
   } catch (error) {
     Logger.error(LOG_TAG, 'Failed to load services', error);
   }

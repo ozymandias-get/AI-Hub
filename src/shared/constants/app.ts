@@ -22,6 +22,7 @@ export const APP_CONSTANTS = {
 
   STORAGE_KEYS: {
     FAVORITES: 'favorite_services',
+    LAST_OPENED: 'last_opened_services',
     LANGUAGE: 'app_language',
     SETTINGS_FILENAME: 'app-settings.json',
   },
